@@ -8,8 +8,8 @@ describe('world loader', () => {
 
   it('exposes the authored map dimensions', () => {
     const w = new World(7);
-    expect(w.width).toBe(64);
-    expect(w.height).toBe(64);
+    expect(w.width).toBe(128);
+    expect(w.height).toBe(128);
   });
 
   it('groundAt reads the authored ground layer', () => {

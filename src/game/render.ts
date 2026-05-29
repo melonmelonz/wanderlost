@@ -41,8 +41,10 @@ export function render(ctx: CanvasRenderingContext2D, world: World, player: Play
   const { width, height } = ctx.canvas;
   const targetX = player.px + TILE / 2 - width / 2;
   const targetY = player.py + TILE / 2 - height / 2;
-  cam.x += (targetX - cam.x) * 0.15;
-  cam.y += (targetY - cam.y) * 0.15;
+  cam.x += (targetX - cam.x) * 0.12; // gentle follow — a touch smoother than a hard snap
+  cam.y += (targetY - cam.y) * 0.12;
+
+  const now = performance.now(); // continuous clock for ambient sway/glow (independent of day clock)
 
   ctx.imageSmoothingEnabled = false;
   ctx.fillStyle = '#000';
@@ -83,8 +85,16 @@ export function render(ctx: CanvasRenderingContext2D, world: World, player: Play
       for (let tx = minTx; tx <= maxTx; tx++) {
         if (world.groundAt(tx, ty) !== GroundType.Grass) continue;
         const sx = Math.round(tx * TILE - cam.x), sy = Math.round(ty * TILE - cam.y);
+        // top-pinned wave: shear the blade tips sideways while the base stays planted, so the
+        // breeze visibly ripples across the field (phase varies per tile). Far stronger than a
+        // whole-tile nudge — drawImage can't animate the GIF frames, so we move the pixels ourselves.
+        const shear = Math.sin(now / 600 + tx * 0.7 + ty * 0.4) * 0.18;
+        const baseY = sy + TILE;
         ctx.globalAlpha = rc.grass.isRevealed(tx, ty) ? 0.4 : 0.85;
+        ctx.save();
+        ctx.translate(0, baseY); ctx.transform(1, 0, shear, 1, 0, 0); ctx.translate(0, -baseY);
         ctx.drawImage(grassImg, sx, sy - 4, TILE, TILE);
+        ctx.restore();
         ctx.globalAlpha = 1;
       }
     }
@@ -103,8 +113,19 @@ export function render(ctx: CanvasRenderingContext2D, world: World, player: Play
         if (!img) return; // assets are guaranteed at build time; no grey-block fallback
         const sx = Math.round(o.tx * TILE - cam.x), sy = Math.round(o.ty * TILE - cam.y);
         const w = TILE * 1.5, h = TILE * 1.5;
+        const dx = sx - (w - TILE) / 2, dy = sy - (h - TILE);
         ctx.globalAlpha = opened ? 0.65 : 1;
-        ctx.drawImage(img, sx - (w - TILE) / 2, sy - (h - TILE), w, h);
+        if (o.kind === 'tree') {
+          // gentle bend: shear x by height, pivoting at the trunk base so the canopy sways
+          const baseY = sy + TILE;
+          const shear = Math.sin(now / 900 + o.tx * 0.6 + o.ty * 0.3) * 0.07;
+          ctx.save();
+          ctx.translate(0, baseY); ctx.transform(1, 0, shear, 1, 0, 0); ctx.translate(0, -baseY);
+          ctx.drawImage(img, dx, dy, w, h);
+          ctx.restore();
+        } else {
+          ctx.drawImage(img, dx, dy, w, h);
+        }
         ctx.globalAlpha = 1;
       },
     });
@@ -112,8 +133,7 @@ export function render(ctx: CanvasRenderingContext2D, world: World, player: Play
   for (const p of rc.peers.values()) {
     drawables.push({ wy: p.y + TILE, draw: () => drawSprite(ctx, p.char, indexDir(p.dir), p.x - cam.x, p.y - cam.y, p.name, rc.resolve, p.moving) });
   }
-  const hop = -Math.sin(player.progress * Math.PI) * 3; // gentle per-step bounce, smooth regardless of frame count
-  drawables.push({ wy: player.py + TILE, draw: () => drawSprite(ctx, player.character, player.facing, player.px - cam.x, player.py - cam.y + hop, undefined, rc.resolve, player.sliding) });
+  drawables.push({ wy: player.py + TILE, draw: () => drawSprite(ctx, player.character, player.facing, player.px - cam.x, player.py - cam.y, undefined, rc.resolve, player.sliding) });
   drawables.sort((a, b) => a.wy - b.wy);
   for (const d of drawables) d.draw();
 
@@ -132,6 +152,22 @@ export function render(ctx: CanvasRenderingContext2D, world: World, player: Play
     }
     ctx.globalCompositeOperation = 'source-over';
   }
+
+  // mushroom glow (additive) — always on, gently pulsing cyan/violet, brighter at night
+  ctx.globalCompositeOperation = 'lighter';
+  for (const o of world.drawables()) {
+    if (o.kind !== 'mushroom') continue;
+    if (o.tx < minTx - 2 || o.tx > maxTx + 2 || o.ty < minTy - 2 || o.ty > maxTy + 2) continue;
+    const sx = o.tx * TILE - cam.x + TILE / 2, sy = o.ty * TILE - cam.y + TILE / 2;
+    const pulse = 0.25 + 0.1 * Math.sin(now / 600 + o.tx + o.ty);
+    const a = pulse * (0.4 + 0.6 * night);
+    const rad = 22;
+    const g = ctx.createRadialGradient(sx, sy, 0, sx, sy, rad);
+    g.addColorStop(0, `rgba(120,220,255,${a})`);
+    g.addColorStop(1, 'rgba(120,220,255,0)');
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(sx, sy, rad, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.globalCompositeOperation = 'source-over';
 
   // day/night tint + starfield
   const ph = phaseAt(rc.clockMs);

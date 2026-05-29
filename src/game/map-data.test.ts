@@ -52,9 +52,20 @@ describe('MapBuilder', () => {
 });
 
 describe('authored world map', () => {
-  it('is 64x64', () => {
-    expect(WORLD_MAP.width).toBe(64);
-    expect(WORLD_MAP.height).toBe(64);
+  it('is 128x128', () => {
+    expect(WORLD_MAP.width).toBe(128);
+    expect(WORLD_MAP.height).toBe(128);
+  });
+
+  it('each spoke from spawn is walkable for several tiles in every direction', () => {
+    const { tx, ty } = WORLD_MAP.spawn;
+    const walk = (x: number, y: number) => WORLD_MAP.collision[y * WORLD_MAP.width + x] === 0;
+    for (let d = 1; d <= 6; d++) {
+      expect(walk(tx + d, ty)).toBe(true); // east
+      expect(walk(tx - d, ty)).toBe(true); // west
+      expect(walk(tx, ty + d)).toBe(true); // south
+      expect(walk(tx, ty - d)).toBe(true); // north
+    }
   });
 
   it('spawn is in bounds and walkable', () => {

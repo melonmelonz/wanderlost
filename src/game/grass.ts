@@ -7,8 +7,8 @@ export type RevealResult = number | 'note' | null; // 1..7 collectible, a note, 
 export function rollReveal(worldSeed: number, tx: number, ty: number): RevealResult {
   const rng = mulberry32(xmur3(`reveal|${worldSeed}|${tx}|${ty}`)());
   const r = rng();
-  if (r < 0.00125) return 'note';                  // ~1/800
-  if (r < 0.125) return 1 + Math.floor(rng() * 7); // ~12% collectible (types 1..7)
+  if (r < 0.0025) return 'note';                   // ~1/400
+  if (r < 0.22) return 1 + Math.floor(rng() * 7);  // ~22% collectible (types 1..7)
   return null;
 }
 

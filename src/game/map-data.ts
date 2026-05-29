@@ -166,43 +166,91 @@ export function expandScene(s: PlacedScene): PlacedProp[] {
 }
 
 // ---- The authored region ------------------------------------------------------------------
-// 64x64 soil basin, ringed by a 2-tile cliff belt with a water moat just inside it. Grass
-// fields and a red-barren wasteland are painted as continuous regions; scenes are placed at
-// deliberate, spread-out coordinates (a rest stop by spawn, destinations toward the corners).
+// 128x128 soil basin, ringed by a 2-tile cliff belt with a water moat just inside it. The spawn
+// hub is a central stone plaza; four stone-path spokes lead N/E/S/W to a deliberately composed
+// destination region apiece — north grassland+groves framing a pond, east red-barren ruins and a
+// crash site, south bone-bed flats with twin ossuaries, west a stone-path rest-stop settlement.
+// Mid-spoke clusters keep each journey from reading as empty soil, and a grass apron + early chest
+// sit beside spawn so collectibles turn up within the first few steps. Props read as arrangements
+// (rows, clusters, framing a focal point) — never single random drops.
 function buildWorld(): WorldMap {
-  const b = new MapBuilder(64, 64, GroundType.Soil);
+  const W = 128, C = 64;
+  const b = new MapBuilder(W, W, GroundType.Soil);
   b.border(2, GroundType.Cliff);
   // water moat just inside the cliff (blocked)
-  for (let i = 2; i < 62; i++) {
-    for (const [x, y] of [[i, 2], [i, 61], [2, i], [61, i]] as const) { b.setGround(x, y, GroundType.Water); b.block(x, y); }
+  for (let i = 2; i < W - 2; i++) {
+    for (const [x, y] of [[i, 2], [i, W - 3], [2, i], [W - 3, i]] as const) { b.setGround(x, y, GroundType.Water); b.block(x, y); }
   }
-  // continuous grass fields
-  b.blob(18, 20, 7, GroundType.Grass, 11);
-  b.blob(30, 16, 5, GroundType.Grass, 23);
-  b.blob(14, 44, 6, GroundType.Grass, 31);
-  // red-barren wasteland (eastern third)
-  b.blob(48, 40, 9, GroundType.RedBarren, 47);
-  b.blob(52, 22, 6, GroundType.RedBarren, 53);
-  // stone path spine from spawn outward
-  b.fillRect(31, 33, 2, 20, GroundType.StonePath);
-  b.fillRect(20, 33, 13, 2, GroundType.StonePath);
 
-  b.spawnAt(32, 34);
+  // a blocked pond: paint water, then block every water tile in its bounding box
+  const pond = (cx: number, cy: number, r: number, seed: number) => {
+    b.blob(cx, cy, r, GroundType.Water, seed);
+    for (let ty = cy - r - 1; ty <= cy + r + 1; ty++)
+      for (let tx = cx - r - 1; tx <= cx + r + 1; tx++)
+        if (b.inBounds(tx, ty) && b.ground[ty * W + tx] === GroundType.Water) b.block(tx, ty);
+  };
 
-  // scenes (anchors chosen to sit on/near appropriate ground)
-  b.scene('rest-stop', 32, 30);
-  b.scene('grove', 18, 20);
-  b.scene('grove', 14, 44);
-  b.scene('crash-site', 48, 40);
-  b.scene('ruin-field', 52, 22);
-  b.scene('bone-bed', 24, 50);
+  // --- North: grassland + groves, framing a pond focal point ----------------------------------
+  b.blob(C, 34, 20, GroundType.Grass, 11);
+  b.blob(C - 16, 30, 8, GroundType.Grass, 17);
+  b.blob(C + 16, 30, 8, GroundType.Grass, 19);
+  pond(C, 12, 5, 101); // sits above the spoke's end so you arrive at its shore, not in it
+  b.scene('grove', C - 14, 30);
+  b.scene('grove', C + 14, 30);
+  b.prop('tree', C - 6, 20, 0, true).prop('tree', C + 6, 20, 1, true);
+  b.prop('tree', C - 3, 18, 2, true).prop('tree', C + 3, 18, 0, true);
+  b.prop('mushroom', C - 12, 28, 0).prop('mushroom', C + 12, 28, 1).prop('mushroom', C, 22, 0);
+  b.prop('flower', C - 4, 38, 0).prop('flower', C + 4, 38, 1).prop('flower', C, 42, 0);
+  // mid-spoke cluster so the walk north isn't bare
+  b.prop('tree', C - 4, 48, 1, true).prop('mushroom', C + 4, 48, 0).prop('flower', C - 3, 52, 1);
 
-  // scattered standalone walkable detail props (no campfires here)
-  b.prop('flower', 28, 36, 0).prop('flower', 36, 38, 1).prop('mushroom', 22, 38, 0);
-  b.prop('boulder', 40, 30, 0, true).prop('boulder', 44, 48, 1, true);
-  b.prop('signpost', 30, 33, 0, true);
-  b.prop('jellyfish', 50, 45, 0).prop('jellyfish', 46, 38, 1);
-  b.prop('antenna', 55, 50, 0, true);
+  // --- East: red-barren wastes → ruin-field + crash-site --------------------------------------
+  b.blob(104, C, 16, GroundType.RedBarren, 47);
+  b.blob(86, C - 10, 8, GroundType.RedBarren, 53);
+  b.blob(90, C + 11, 8, GroundType.RedBarren, 59);
+  b.scene('ruin-field', 98, C - 8);
+  b.scene('crash-site', 110, C + 8);
+  b.prop('boulder', 84, C + 6, 0, true).prop('boulder', 116, C - 8, 1, true);
+  b.prop('scrap', 92, C, 0).prop('scrap', 118, C + 3, 1);
+  b.prop('antenna', 112, C - 10, 0, true);
+  // mid-spoke cluster
+  b.prop('scrap', 84, C - 3, 0).prop('boulder', 86, C + 3, 1, true);
+
+  // --- South: bone-bed flats → twin ossuaries (chests) + statue landmark ----------------------
+  b.blob(C, 100, 16, GroundType.BoneBed, 71);
+  b.blob(C - 12, 92, 7, GroundType.BoneBed, 73);
+  b.blob(C + 12, 108, 7, GroundType.BoneBed, 79);
+  b.scene('bone-bed', C - 9, 96);
+  b.scene('bone-bed', C + 9, 106);
+  b.prop('bones', C, 90, 0).prop('bones', C - 4, 102, 1).prop('bones', C + 4, 102, 0);
+  b.prop('bones', C - 8, 110, 1).prop('bones', C + 8, 110, 0);
+  b.prop('statue', C, 114, 0, true);
+  // mid-spoke cluster
+  b.prop('bones', C - 3, 84, 0).prop('bones', C + 3, 84, 1);
+
+  // --- West: stone-path settlement → rest-stop ------------------------------------------------
+  b.fillRect(8, C - 8, 26, 17, GroundType.StonePath);
+  b.scene('rest-stop', 20, C);
+  b.prop('bench', 14, C - 4, 0, true).prop('bench', 28, C + 4, 0, true);
+  b.prop('signpost', 32, C - 5, 0, true).prop('signpost', 10, C + 5, 0, true);
+  b.prop('bedroll', 16, C + 5, 0).prop('boulder', 30, C - 6, 0, true);
+  // mid-spoke cluster
+  b.prop('signpost', 46, C - 3, 0, true).prop('bench', 48, C + 2, 0, true);
+
+  // --- spawn hub plaza + four stone-path spokes -----------------------------------------------
+  b.fillRect(C - 4, C - 4, 9, 9, GroundType.StonePath);  // plaza
+  b.fillRect(C - 1, 22, 2, 38, GroundType.StonePath);    // north spoke (stops at the pond shore)
+  b.fillRect(C - 1, C + 5, 2, 38, GroundType.StonePath); // south spoke
+  b.fillRect(20, C - 1, 40, 2, GroundType.StonePath);    // west spoke
+  b.fillRect(C + 5, C - 1, 40, 2, GroundType.StonePath); // east spoke
+
+  // --- spawn apron: grass beside the plaza + an early chest so artifacts turn up immediately ---
+  b.blob(C - 10, C + 10, 5, GroundType.Grass, 201);
+  b.blob(C + 10, C + 10, 5, GroundType.Grass, 203);
+  b.prop('chest', C + 5, C + 6, 0, true); // just off the SE corner, easy to find and face
+  b.prop('signpost', C + 2, C - 2, 0, true); // central plaza signpost
+
+  b.spawnAt(C, C);
 
   // bake each scene's ground stamps + blocked footprints into the layers
   for (const s of b.scenes) {
@@ -210,6 +258,20 @@ function buildWorld(): WorldMap {
     for (const g of def.ground ?? []) b.fillRect(s.tx + g.dx, s.ty + g.dy, g.w, g.h, g.g);
     for (const p of expandScene(s)) if (p.blocked) b.block(p.tx, p.ty);
   }
+
+  // keep the plaza + spokes walkable even where a region painted/stamped over them.
+  // Every rectangle below is verified to contain no water tiles, so this never opens the moat/pond.
+  const clearWalk = (x: number, y: number, w: number, h: number) => {
+    for (let ty = y; ty < y + h; ty++) for (let tx = x; tx < x + w; tx++)
+      if (b.inBounds(tx, ty)) b.collision[ty * W + tx] = 0;
+  };
+  clearWalk(C - 4, C - 4, 9, 9);  // plaza
+  clearWalk(C - 1, 22, 2, 38);    // north spoke
+  clearWalk(C - 1, C + 5, 2, 38); // south spoke
+  clearWalk(20, C - 1, 40, 2);    // west spoke
+  clearWalk(C + 5, C - 1, 40, 2); // east spoke
+  b.block(C + 2, C - 2); // re-solidify the plaza signpost the clear just opened
+
   return b.build();
 }
 
