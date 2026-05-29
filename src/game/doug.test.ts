@@ -36,6 +36,25 @@ describe('Player slide', () => {
     expect(p.px).toBeCloseTo(16, 5); // halfway in space => linear, no ease pulse
   });
 
+  it('reports overshoot once past the step, then clears it', () => {
+    const p = new Player(0, 0, 'doug');
+    p.startSlide(1, 0, 'east'); // 140ms step
+    p.update(150); // 10ms past the end
+    expect(p.sliding).toBe(false);
+    expect(p.takeOvershoot()).toBeCloseTo(10, 5);
+    expect(p.takeOvershoot()).toBe(0); // consumed
+  });
+
+  it('chains a step with carried overshoot so no time is lost at the boundary', () => {
+    const p = new Player(0, 0, 'doug');
+    p.startSlide(1, 0, 'east');
+    p.update(150);              // finishes step 1 with 10ms overshoot
+    const carry = p.takeOvershoot();
+    p.startSlide(2, 0, 'east'); // step 2 from tile 1
+    p.update(carry);           // feed the leftover 10ms straight in
+    expect(p.px).toBeCloseTo(32 + (10 / 140) * 32, 5); // already advanced into step 2
+  });
+
   it('ignores a new slide while already sliding', () => {
     const p = new Player(0, 0, 'doug');
     p.startSlide(1, 0, 'east');

@@ -1,5 +1,6 @@
 // src/game/doug.ts
-// Local player: grid-locked position with an eased slide tween between tiles.
+// Local player: grid-locked position with a linear slide tween between tiles. Steps chain
+// seamlessly — leftover time past one step feeds the next — so continuous walking never pauses.
 import type { Dir } from './assets';
 import { TILE } from './world';
 
@@ -14,13 +15,15 @@ export class Player {
   private fromPx = 0; private fromPy = 0; private toPx = 0; private toPy = 0;
   private elapsed = 0; private duration = 0;
   private pendingTx = 0; private pendingTy = 0;
+  private overshoot = 0; // leftover time past a finished step, fed into the next one for seamless walking
 
   constructor(public tx: number, public ty: number, public character: string) {
     this.px = tx * TILE; this.py = ty * TILE;
   }
 
-  // 0..1 across the current tile step (0 when idle). Drives a procedural hop in the renderer.
-  get progress() { return this.sliding ? Math.min(1, this.elapsed / this.duration) : 0; }
+  // Time that ran past the end of the last finished step; the engine feeds it into the next
+  // step (via update) so no animation frame is wasted sitting still at a tile boundary.
+  takeOvershoot(): number { const o = this.overshoot; this.overshoot = 0; return o; }
 
   startSlide(ntx: number, nty: number, dir: Dir) {
     if (this.sliding) return;
@@ -43,6 +46,7 @@ export class Player {
     this.px = this.fromPx + (this.toPx - this.fromPx) * t;
     this.py = this.fromPy + (this.toPy - this.fromPy) * t;
     if (t >= 1) {
+      this.overshoot = this.elapsed - this.duration; // >= 0; consumed by the next step
       this.sliding = false;
       this.tx = this.pendingTx; this.ty = this.pendingTy;
       this.px = this.toPx; this.py = this.toPy;

@@ -149,21 +149,10 @@ export function startEngine(canvas: HTMLCanvasElement): Game {
     animClock += dt / 1000;
     if (!input.paused) clockMs += dt;
 
-    if (!player.sliding && !input.paused) {
-      const { dx, dy } = input.intent();
-      const dir = vecToDir(dx, dy);
-      if (dir && canStep(world, player.tx, player.ty, dx, dy)) {
-        log('slide', { tx: player.tx + dx, ty: player.ty + dy, dir });
-        player.startSlide(player.tx + dx, player.ty + dy, dir);
-        startAudio();
-      } else if (dir) {
-        log('blocked', { tx: player.tx + dx, ty: player.ty + dy });
-      }
-    }
-
     const wasSliding = player.sliding;
     player.update(dt);
-    if (wasSliding && !player.sliding) {
+    const justArrived = wasSliding && !player.sliding;
+    if (justArrived) {
       // arrived on a tile
       log('arrive', { tx: player.tx, ty: player.ty });
       net.move(player.tx * TILE, player.ty * TILE, dirIndex(player.facing), false);
@@ -179,6 +168,22 @@ export function startEngine(canvas: HTMLCanvasElement): Game {
           const text = noteFor(player.tx, player.ty);
           addJournal({ id: key, text, day: dayNumber(clockMs) });
         }
+      }
+    }
+
+    // Begin or chain the next step AFTER updating, so a step that just finished rolls straight
+    // into the next this same frame (consuming the leftover time). This removes the one-frame
+    // dead stop at every tile boundary that read as movement jitter.
+    if (!player.sliding && !input.paused) {
+      const { dx, dy } = input.intent();
+      const dir = vecToDir(dx, dy);
+      if (dir && canStep(world, player.tx, player.ty, dx, dy)) {
+        log('slide', { tx: player.tx + dx, ty: player.ty + dy, dir });
+        player.startSlide(player.tx + dx, player.ty + dy, dir);
+        startAudio();
+        if (justArrived) { const carry = player.takeOvershoot(); if (carry > 0) player.update(carry); }
+      } else if (dir) {
+        log('blocked', { tx: player.tx + dx, ty: player.ty + dy });
       }
     }
 
