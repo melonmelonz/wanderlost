@@ -24,6 +24,18 @@ export function HUD() {
       {hudState.muted && (
         <div style={{ position: 'fixed', top: 12, left: 14, fontSize: 10, color: '#6a6358' }}>muted</div>
       )}
+      {hudState.interact && (
+        <div style={{
+          position: 'fixed', left: '50%', bottom: '12%', transform: 'translateX(-50%)',
+          fontSize: 12, lineHeight: 1.5, letterSpacing: '0.04em', color: '#cfe8d8',
+          textAlign: 'center', maxWidth: '60vw', fontStyle: 'italic',
+          textShadow: '0 1px 8px #000', padding: '8px 16px',
+          background: 'rgba(10,18,16,0.55)', border: '1px solid rgba(120,220,255,0.18)',
+          borderRadius: 4, backdropFilter: 'blur(2px)', animation: 'wl-fade 4.2s ease',
+        }}>
+          {hudState.interact}
+        </div>
+      )}
       {hudState.dayCard && (
         <div style={{
           position: 'fixed', left: '50%', top: '14%', transform: 'translateX(-50%)',

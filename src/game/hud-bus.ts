@@ -6,7 +6,7 @@ export interface JournalEntry { id: string; text: string; day: number; }
 
 export const hudState = {
   specimens: {} as Record<number, number>,
-  thought: '' as string,
+  interact: '' as string,
   dayCard: '' as string,
   specimenFlash: 0 as number,
   muted: false as boolean,
@@ -21,7 +21,7 @@ const listeners = new Set<Listener>();
 export function subscribe(l: Listener) { listeners.add(l); return () => listeners.delete(l); }
 export function emit() { listeners.forEach(l => l()); }
 
-let thoughtTimer = 0;
+let interactTimer = 0;
 let dayTimer = 0;
 
 export function addSpecimen(type: number) {
@@ -30,10 +30,11 @@ export function addSpecimen(type: number) {
   emit();
 }
 
-export function showThought(text: string) {
-  hudState.thought = text; emit();
-  clearTimeout(thoughtTimer);
-  thoughtTimer = setTimeout(() => { hudState.thought = ''; emit(); }, 4000) as unknown as number;
+// Examine text shown when the player interacts (space/E) with a nearby prop. Transient, bottom-centre.
+export function showInteract(text: string) {
+  hudState.interact = text; emit();
+  clearTimeout(interactTimer);
+  interactTimer = setTimeout(() => { hudState.interact = ''; emit(); }, 4200) as unknown as number;
 }
 
 export function showDayCard(text: string) {

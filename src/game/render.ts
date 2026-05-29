@@ -91,12 +91,13 @@ export function render(ctx: CanvasRenderingContext2D, world: World, player: Play
         const sx = tx * TILE - camX, sy = ty * TILE - camY;
         // top-pinned wave: shear the blade tips sideways while the base stays planted, so the
         // breeze visibly ripples across the field. drawImage can't animate the GIF frames, so we
-        // move the pixels ourselves. The phase/period are scrambled per tile (a cheap hash) and a
-        // second slow harmonic is mixed in, so the field never falls into a single synced wavefront
-        // (that coherence read as an eye-straining moire illusion).
-        const h = (tx * 73856093) ^ (ty * 19349663);
-        const ph = (h & 1023) / 1023 * Math.PI * 2; // per-tile phase, effectively random
-        const shear = (Math.sin(now / 600 + ph) * 0.7 + Math.sin(now / 1500 + ph * 1.7) * 0.3) * 0.18;
+        // move the pixels ourselves. Phase advances SMOOTHLY across space (a travelling wave), so
+        // neighbouring tufts lean *together* like real wind. A per-tile random phase (the old
+        // approach) made adjacent tiles shear in opposite directions, overlapping their dark blades
+        // into doubled-darkness columns that swept across the field as black "bars". The two slow
+        // harmonics keep it organic without ever locking into one rigid synced wavefront.
+        const ph = (tx + ty) * 0.6;
+        const shear = (Math.sin(now / 900 + ph) * 0.7 + Math.sin(now / 2100 + ph * 0.5) * 0.3) * 0.09;
         const baseY = sy + TILE;
         ctx.globalAlpha = rc.grass.isRevealed(tx, ty) ? 0.4 : 0.85;
         ctx.save();

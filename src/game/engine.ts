@@ -16,11 +16,12 @@ import { startAudio, toggleMute, setDuck, isMuted } from './audio';
 import { loadSave, writeSave, type SaveData } from './save';
 import { resolveStart } from './spawn';
 import {
-  addSpecimen, addJournal, showDayCard, setPeerCount, setMuted, setCharacter as hudSetCharacter,
+  addSpecimen, addJournal, showDayCard, showInteract, setPeerCount, setMuted, setCharacter as hudSetCharacter,
   hydrateHud, toggleInventory, hudState,
 } from './hud-bus';
 import { DAY_LINES } from '../content/flavor-days';
 import { noteFor } from '../content/flavor-notes';
+import { examineFor } from '../content/flavor-examine';
 import { pick, mulberry32, xmur3 } from './rng';
 import { makeLogger, debugEnabled } from './debug';
 
@@ -122,21 +123,29 @@ export function startEngine(canvas: HTMLCanvasElement): Game {
     },
   });
 
-  // chest open / interact
+  // interact (space / E): loot an unopened chest, otherwise examine whatever prop we stand on or face
   input.onAction = () => {
     startAudio();
     const [fdx, fdy] = facingVec(player.facing);
-    const ctx2 = { tx: player.tx + fdx, ty: player.ty + fdy };
-    const here = findChest(world, player.tx, player.ty) ?? findChest(world, ctx2.tx, ctx2.ty);
-    if (!here) return;
-    const key = tileKey(here.tx, here.ty);
-    if (open.isOpen(here.tx, here.ty)) return;
-    open.setOpen(here.tx, here.ty);
-    net.open(key);
-    // deterministic chest loot: 2-4 specimens
-    const rng = mulberry32(xmur3(`chest|${world.seed}|${key}`)());
-    const n = 2 + Math.floor(rng() * 3);
-    for (let i = 0; i < n; i++) addSpecimen(1 + Math.floor(rng() * 7));
+    const ftx = player.tx + fdx, fty = player.ty + fdy;
+
+    // unopened chest at our tile or the tile we face -> loot it
+    const chest = findChest(world, player.tx, player.ty) ?? findChest(world, ftx, fty);
+    if (chest && !open.isOpen(chest.tx, chest.ty)) {
+      const key = tileKey(chest.tx, chest.ty);
+      open.setOpen(chest.tx, chest.ty);
+      net.open(key);
+      // deterministic chest loot: 2-4 specimens
+      const rng = mulberry32(xmur3(`chest|${world.seed}|${key}`)());
+      const n = 2 + Math.floor(rng() * 3);
+      for (let i = 0; i < n; i++) addSpecimen(1 + Math.floor(rng() * 7));
+      showInteract(`You ease the lid open. ${n} specimen${n === 1 ? '' : 's'} inside. It creaks like it's glad to be useful.`);
+      return;
+    }
+
+    // otherwise: examine whatever prop is on the tile we face, then the tile we stand on
+    const prop = findProp(world, ftx, fty) ?? findProp(world, player.tx, player.ty);
+    if (prop) showInteract(examineFor(prop.kind, prop.tx, prop.ty));
   };
   input.onToggleInventory = () => toggleInventory();
   input.onMute = () => { startAudio(); const m = toggleMute(); setMuted(m); };
@@ -249,6 +258,10 @@ function facingVec(d: Dir): [number, number] {
 
 function findChest(world: World, tx: number, ty: number) {
   return world.drawables().find(o => o.kind === 'chest' && o.tx === tx && o.ty === ty);
+}
+
+function findProp(world: World, tx: number, ty: number) {
+  return world.drawables().find(o => o.tx === tx && o.ty === ty);
 }
 
 let duckPhase = '';
