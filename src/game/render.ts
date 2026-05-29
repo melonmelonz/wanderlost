@@ -12,6 +12,7 @@ import { phaseAt, nightStrength } from './daynight';
 import type { PeerState } from './peers';
 import { indexDir } from './peers';
 import type { Particles } from './particles';
+import { GRASS_SWAY, CAMPFIRE, framePath, frameAt } from './ambient';
 
 export interface Camera { x: number; y: number; }
 export interface PeerView { px: number; py: number; facing: string; character: string; name: string; }
@@ -49,6 +50,17 @@ function ensureFireflies(world: World) {
     if (world.groundAt(tx, ty) !== GroundType.Grass) continue;
     fireflies.push({ x: tx * TILE + rnd() * TILE, y: ty * TILE + rnd() * TILE, ph: rnd() * Math.PI * 2 });
   }
+}
+
+// Soft contact shadow: a flat dark ellipse that grounds a sprite to the tile beneath it.
+function groundShadow(ctx: CanvasRenderingContext2D, cx: number, cy: number, rx: number, ry: number) {
+  ctx.save();
+  ctx.globalAlpha = 0.22;
+  ctx.fillStyle = '#000';
+  ctx.beginPath();
+  ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
 }
 
 interface Drawable { wy: number; draw(): void; }
@@ -98,79 +110,42 @@ export function render(ctx: CanvasRenderingContext2D, world: World, player: Play
     }
   }
 
-  // animated grass sway, overlaid on grass-ground tiles; dimmed once searched
-  const grassImg = getImage('/assets/grass/grass-sway.gif');
-  if (grassImg) {
-    for (let ty = minTy; ty <= maxTy; ty++) {
-      for (let tx = minTx; tx <= maxTx; tx++) {
-        if (world.groundAt(tx, ty) !== GroundType.Grass) continue;
-        const sx = tx * TILE - camX, sy = ty * TILE - camY;
-        // top-pinned wave: shear the blade tips sideways while the base stays planted, so the
-        // breeze visibly ripples across the field. drawImage can't animate the GIF frames, so we
-        // move the pixels ourselves. Phase advances SMOOTHLY across space (a travelling wave), so
-        // neighbouring tufts lean *together* like real wind. A per-tile random phase (the old
-        // approach) made adjacent tiles shear in opposite directions, overlapping their dark blades
-        // into doubled-darkness columns that swept across the field as black "bars". The two slow
-        // harmonics keep it organic without ever locking into one rigid synced wavefront.
-        const ph = (tx + ty) * 0.6;
-        const shear = (Math.sin(now / 900 + ph) * 0.7 + Math.sin(now / 2100 + ph * 0.5) * 0.3) * 0.09;
-        const baseY = sy + TILE;
-        ctx.globalAlpha = rc.grass.isRevealed(tx, ty) ? 0.4 : 0.85;
-        ctx.save();
-        ctx.translate(0, baseY); ctx.transform(1, 0, shear, 1, 0, 0); ctx.translate(0, -baseY);
-        ctx.drawImage(grassImg, sx, sy - 4, TILE, TILE);
-        ctx.restore();
-        ctx.globalAlpha = 1;
-      }
-    }
-  }
-
-  // water shimmer: a couple of slow specular glints sweeping each water tile (additive)
-  ctx.globalCompositeOperation = 'lighter';
+  // animated grass sway, overlaid on grass-ground tiles; dimmed once searched. Real pre-rendered
+  // frames stepped by clock — crisp 1:1 pixels, no shear/distortion. A per-tile frame offset keeps
+  // the field from pulsing in lockstep while each tuft still plays a clean, in-order loop.
   for (let ty = minTy; ty <= maxTy; ty++) {
     for (let tx = minTx; tx <= maxTx; tx++) {
-      if (world.groundAt(tx, ty) !== GroundType.Water) continue;
+      if (world.groundAt(tx, ty) !== GroundType.Grass) continue;
+      const off = ((tx * 73856093) ^ (ty * 19349663)) >>> 0;
+      const frame = getImage(framePath(GRASS_SWAY, frameAt(GRASS_SWAY, now, off)));
+      if (!frame) continue;
       const sx = tx * TILE - camX, sy = ty * TILE - camY;
-      const phw = tx * 0.7 + ty * 1.3;
-      for (let k = 0; k < 2; k++) {
-        const yy = sy + 3 + (Math.sin(now / 700 + phw + k * 2.1) * 0.5 + 0.5) * (TILE - 6);
-        const a = 0.04 + 0.05 * Math.sin(now / 480 + phw + k);
-        if (a <= 0) continue;
-        ctx.globalAlpha = a;
-        ctx.fillStyle = 'rgb(150,220,255)';
-        ctx.fillRect(sx + 3, Math.round(yy), TILE - 6, 1);
-      }
+      ctx.globalAlpha = rc.grass.isRevealed(tx, ty) ? 0.4 : 0.85;
+      ctx.drawImage(frame, sx, sy - 4, TILE, TILE);
+      ctx.globalAlpha = 1;
     }
   }
-  ctx.globalAlpha = 1;
-  ctx.globalCompositeOperation = 'source-over';
 
   // y-sorted drawables: authored props/scenes + peers + local player
   const drawables: Drawable[] = [];
   for (const o of world.drawables()) {
     if (o.tx < minTx - 2 || o.tx > maxTx + 2 || o.ty < minTy - 2 || o.ty > maxTy + 2) continue;
     const opened = o.kind === 'chest' && rc.open.isOpen(o.tx, o.ty);
-    const path = objectPath(o.kind, o.variant);
+    // campfire animates through real frames; everything else is its static authored sprite
+    const path = o.kind === 'campfire' ? null : objectPath(o.kind, o.variant);
     drawables.push({
       wy: o.ty * TILE + TILE,
       draw: () => {
-        const img = getImage(path);
-        if (!img) return; // assets are guaranteed at build time; no grey-block fallback
         const sx = o.tx * TILE - camX, sy = o.ty * TILE - camY;
         const w = TILE * 1.5, h = TILE * 1.5;
         const dx = sx - (w - TILE) / 2, dy = sy - (h - TILE);
+        const img = o.kind === 'campfire'
+          ? getImage(framePath(CAMPFIRE, frameAt(CAMPFIRE, now, (o.tx + o.ty) % CAMPFIRE.count)))
+          : getImage(path!);
+        if (!img) return; // assets are guaranteed at build time; no grey-block fallback
+        groundShadow(ctx, sx + TILE / 2, sy + TILE - 3, TILE * 0.42, TILE * 0.16);
         ctx.globalAlpha = opened ? 0.65 : 1;
-        if (o.kind === 'tree') {
-          // gentle bend: shear x by height, pivoting at the trunk base so the canopy sways
-          const baseY = sy + TILE;
-          const shear = Math.sin(now / 900 + o.tx * 0.6 + o.ty * 0.3) * 0.07;
-          ctx.save();
-          ctx.translate(0, baseY); ctx.transform(1, 0, shear, 1, 0, 0); ctx.translate(0, -baseY);
-          ctx.drawImage(img, dx, dy, w, h);
-          ctx.restore();
-        } else {
-          ctx.drawImage(img, dx, dy, w, h);
-        }
+        ctx.drawImage(img, dx, dy, w, h);
         ctx.globalAlpha = 1;
       },
     });
@@ -201,7 +176,7 @@ export function render(ctx: CanvasRenderingContext2D, world: World, player: Play
     for (const o of world.drawables()) {
       if (o.kind !== 'campfire') continue;
       const sx = o.tx * TILE - camX + TILE / 2, sy = o.ty * TILE - camY + TILE / 2;
-      const rad = 70 + Math.sin(rc.clockMs / 120) * 6;
+      const rad = 72;
       const g = ctx.createRadialGradient(sx, sy, 0, sx, sy, rad);
       g.addColorStop(0, `rgba(255,180,80,${0.5 * night})`);
       g.addColorStop(1, 'rgba(255,180,80,0)');
@@ -216,8 +191,7 @@ export function render(ctx: CanvasRenderingContext2D, world: World, player: Play
     if (o.kind !== 'mushroom') continue;
     if (o.tx < minTx - 2 || o.tx > maxTx + 2 || o.ty < minTy - 2 || o.ty > maxTy + 2) continue;
     const sx = o.tx * TILE - camX + TILE / 2, sy = o.ty * TILE - camY + TILE / 2;
-    const pulse = 0.25 + 0.1 * Math.sin(now / 600 + o.tx + o.ty);
-    const a = pulse * (0.4 + 0.6 * night);
+    const a = 0.3 * (0.4 + 0.6 * night);
     const rad = 22;
     const g = ctx.createRadialGradient(sx, sy, 0, sx, sy, rad);
     g.addColorStop(0, `rgba(120,220,255,${a})`);
@@ -284,6 +258,7 @@ function drawSprite(
 ) {
   const src = resolve?.(character, facing, moving) ?? `/assets/characters/${character}/rotations/${facing}.png`;
   const img = getImage(src) ?? getImage(`/assets/characters/${character}/rotations/${facing}.png`);
+  groundShadow(ctx, Math.round(sx) + TILE / 2, Math.round(sy) + TILE - 2, TILE * 0.34, TILE * 0.13);
   if (img) ctx.drawImage(img, Math.round(sx) - 8, Math.round(sy) - 16, 48, 48);
   // else: asset missing at build time — nothing drawn (build should have failed first)
   if (name) {

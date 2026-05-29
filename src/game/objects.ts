@@ -4,7 +4,7 @@ import type { PropKind } from './map-data';
 // Props already on local mute disk live under objects/mute/; newly pulled props under objects/props/.
 const PATHS: Record<PropKind, (v: number) => string> = {
   chest:    v => `/assets/objects/mute/treasure-chest-${(v % 7) + 1}.png`,
-  campfire: () => `/assets/objects/campfire-flicker.gif`,
+  campfire: () => `/assets/objects/campfire/0.png`,
   tree:     v => `/assets/objects/mute/alien-tree-${6 + (v % 4)}.png`,
   ruin:     v => `/assets/objects/mute/ruin-archway-${(v % 2) + 1}.png`,
   antenna:  () => `/assets/objects/mute/antenna-tower.png`,

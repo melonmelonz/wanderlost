@@ -14,6 +14,7 @@ import { Net, tileKey } from './net';
 import { Peers, dirIndex } from './peers';
 import { startAudio, toggleMute, setDuck, isMuted, footstep, chime } from './audio';
 import { Particles } from './particles';
+import { GRASS_SWAY, CAMPFIRE, frameSources } from './ambient';
 import { loadSave, writeSave, type SaveData } from './save';
 import { resolveStart } from './spawn';
 import {
@@ -80,8 +81,8 @@ export function startEngine(canvas: HTMLCanvasElement): Game {
   // assets
   for (const slug of GROUND_TILESETS) loadWangTileset(slug).catch(() => {});
   preloadAll([
-    '/assets/grass/grass-sway.gif',
-    '/assets/objects/campfire-flicker.gif',
+    ...frameSources(GRASS_SWAY),
+    ...frameSources(CAMPFIRE),
     ...allObjectSources(),
   ]);
   const loadedChars = new Set<string>();
