@@ -1,6 +1,6 @@
 // src/game/map-data.test.ts
 import { describe, it, expect } from 'bun:test';
-import { MapBuilder, GroundType } from './map-data';
+import { MapBuilder, GroundType, WORLD_MAP, SCENE_DEFS, expandScene } from './map-data';
 
 describe('MapBuilder', () => {
   it('fills the whole grid with the base ground type', () => {
@@ -48,5 +48,47 @@ describe('MapBuilder', () => {
     expect(m.collision[2 * 6 + 2]).toBe(0);
     expect(m.scenes).toEqual([{ kind: 'rest-stop', tx: 3, ty: 3 }]);
     expect(m.spawn).toEqual({ tx: 4, ty: 4 });
+  });
+});
+
+describe('authored world map', () => {
+  it('is 64x64', () => {
+    expect(WORLD_MAP.width).toBe(64);
+    expect(WORLD_MAP.height).toBe(64);
+  });
+
+  it('spawn is in bounds and walkable', () => {
+    const { tx, ty } = WORLD_MAP.spawn;
+    expect(tx).toBeGreaterThan(0);
+    expect(ty).toBeGreaterThan(0);
+    expect(WORLD_MAP.collision[ty * WORLD_MAP.width + tx]).toBe(0);
+  });
+
+  it('is enclosed by a blocked border belt', () => {
+    const { width, height, collision } = WORLD_MAP;
+    for (let x = 0; x < width; x++) {
+      expect(collision[x]).toBe(1);                       // top row
+      expect(collision[(height - 1) * width + x]).toBe(1); // bottom row
+    }
+    for (let y = 0; y < height; y++) {
+      expect(collision[y * width]).toBe(1);               // left col
+      expect(collision[y * width + width - 1]).toBe(1);   // right col
+    }
+  });
+
+  it('every scene kind has a definition', () => {
+    for (const s of WORLD_MAP.scenes) expect(SCENE_DEFS[s.kind]).toBeDefined();
+  });
+
+  it('expandScene returns props offset from the anchor', () => {
+    const props = expandScene({ kind: 'rest-stop', tx: 10, ty: 10 });
+    expect(props.length).toBeGreaterThan(0);
+    expect(props.some(p => p.kind === 'campfire')).toBe(true);
+    for (const p of props) { expect(p.tx).toBeGreaterThanOrEqual(8); expect(p.ty).toBeGreaterThanOrEqual(8); }
+  });
+
+  it('campfires only come from rest-stop scenes (none placed as bare props)', () => {
+    expect(WORLD_MAP.props.some(p => p.kind === 'campfire')).toBe(false);
+    expect(WORLD_MAP.scenes.some(s => s.kind === 'rest-stop')).toBe(true);
   });
 });

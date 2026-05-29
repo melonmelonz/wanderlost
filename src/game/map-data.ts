@@ -98,3 +98,119 @@ export class MapBuilder {
     };
   }
 }
+
+// ---- Scene definitions -------------------------------------------------------------------
+// A scene is a reusable cluster of props at offsets from an anchor tile, plus optional
+// ground stamps and blocked footprints. Campfires live ONLY inside rest-stops.
+interface SceneProp { kind: PropKind; dx: number; dy: number; variant?: number; blocked?: boolean; }
+interface SceneDef { ground?: { dx: number; dy: number; w: number; h: number; g: GroundType }[]; props: SceneProp[]; }
+
+export const SCENE_DEFS: Record<SceneKind, SceneDef> = {
+  'rest-stop': {
+    ground: [{ dx: -2, dy: -2, w: 5, h: 5, g: GroundType.StonePath }],
+    props: [
+      { kind: 'campfire', dx: 0, dy: 0 },
+      { kind: 'bedroll', dx: -1, dy: 1 },
+      { kind: 'bench', dx: 1, dy: 1, blocked: true },
+      { kind: 'signpost', dx: 2, dy: -1, blocked: true },
+    ],
+  },
+  'ruin-field': {
+    ground: [{ dx: -2, dy: -2, w: 6, h: 6, g: GroundType.RedBarren }],
+    props: [
+      { kind: 'ruin', dx: 0, dy: 0, variant: 0, blocked: true },
+      { kind: 'ruin', dx: 2, dy: 1, variant: 1, blocked: true },
+      { kind: 'statue', dx: -1, dy: 2, blocked: true },
+      { kind: 'scrap', dx: 1, dy: -1, variant: 0 },
+      { kind: 'scrap', dx: -2, dy: 0, variant: 1 },
+    ],
+  },
+  'crash-site': {
+    ground: [{ dx: -3, dy: -2, w: 7, h: 6, g: GroundType.Soil }],
+    props: [
+      { kind: 'ship', dx: 0, dy: 0, variant: 0, blocked: true },
+      { kind: 'pod', dx: 2, dy: 1, variant: 0 },
+      { kind: 'scrap', dx: -2, dy: 1, variant: 0 },
+      { kind: 'scrap', dx: 1, dy: -1, variant: 1 },
+      { kind: 'terminal', dx: -1, dy: 2, variant: 0 },
+    ],
+  },
+  'grove': {
+    ground: [{ dx: -3, dy: -3, w: 7, h: 7, g: GroundType.Grass }],
+    props: [
+      { kind: 'tree', dx: 0, dy: 0, variant: 0, blocked: true },
+      { kind: 'tree', dx: 2, dy: 1, variant: 1, blocked: true },
+      { kind: 'tree', dx: -2, dy: 2, variant: 2, blocked: true },
+      { kind: 'stump', dx: 1, dy: -2, variant: 0 },
+      { kind: 'mushroom', dx: -1, dy: -1, variant: 0 },
+      { kind: 'flower', dx: 1, dy: 2, variant: 0 },
+      { kind: 'flower', dx: -2, dy: -2, variant: 1 },
+    ],
+  },
+  'bone-bed': {
+    ground: [{ dx: -2, dy: -2, w: 5, h: 5, g: GroundType.BoneBed }],
+    props: [
+      { kind: 'skeleton', dx: 0, dy: 0, blocked: true },
+      { kind: 'bones', dx: 1, dy: 1, variant: 0 },
+      { kind: 'bones', dx: -1, dy: -1, variant: 1 },
+      { kind: 'chest', dx: 2, dy: 0, variant: 0 },
+    ],
+  },
+};
+
+export function expandScene(s: PlacedScene): PlacedProp[] {
+  const def = SCENE_DEFS[s.kind];
+  return def.props.map(p => ({
+    kind: p.kind, tx: s.tx + p.dx, ty: s.ty + p.dy, variant: p.variant ?? 0, blocked: !!p.blocked,
+  }));
+}
+
+// ---- The authored region ------------------------------------------------------------------
+// 64x64 soil basin, ringed by a 2-tile cliff belt with a water moat just inside it. Grass
+// fields and a red-barren wasteland are painted as continuous regions; scenes are placed at
+// deliberate, spread-out coordinates (a rest stop by spawn, destinations toward the corners).
+function buildWorld(): WorldMap {
+  const b = new MapBuilder(64, 64, GroundType.Soil);
+  b.border(2, GroundType.Cliff);
+  // water moat just inside the cliff (blocked)
+  for (let i = 2; i < 62; i++) {
+    for (const [x, y] of [[i, 2], [i, 61], [2, i], [61, i]] as const) { b.setGround(x, y, GroundType.Water); b.block(x, y); }
+  }
+  // continuous grass fields
+  b.blob(18, 20, 7, GroundType.Grass, 11);
+  b.blob(30, 16, 5, GroundType.Grass, 23);
+  b.blob(14, 44, 6, GroundType.Grass, 31);
+  // red-barren wasteland (eastern third)
+  b.blob(48, 40, 9, GroundType.RedBarren, 47);
+  b.blob(52, 22, 6, GroundType.RedBarren, 53);
+  // stone path spine from spawn outward
+  b.fillRect(31, 33, 2, 20, GroundType.StonePath);
+  b.fillRect(20, 33, 13, 2, GroundType.StonePath);
+
+  b.spawnAt(32, 34);
+
+  // scenes (anchors chosen to sit on/near appropriate ground)
+  b.scene('rest-stop', 32, 30);
+  b.scene('grove', 18, 20);
+  b.scene('grove', 14, 44);
+  b.scene('crash-site', 48, 40);
+  b.scene('ruin-field', 52, 22);
+  b.scene('bone-bed', 24, 50);
+
+  // scattered standalone walkable detail props (no campfires here)
+  b.prop('flower', 28, 36, 0).prop('flower', 36, 38, 1).prop('mushroom', 22, 38, 0);
+  b.prop('boulder', 40, 30, 0, true).prop('boulder', 44, 48, 1, true);
+  b.prop('signpost', 30, 33, 0, true);
+  b.prop('jellyfish', 50, 45, 0).prop('jellyfish', 46, 38, 1);
+  b.prop('antenna', 55, 50, 0, true);
+
+  // bake each scene's ground stamps + blocked footprints into the layers
+  for (const s of b.scenes) {
+    const def = SCENE_DEFS[s.kind];
+    for (const g of def.ground ?? []) b.fillRect(s.tx + g.dx, s.ty + g.dy, g.w, g.h, g.g);
+    for (const p of expandScene(s)) if (p.blocked) b.block(p.tx, p.ty);
+  }
+  return b.build();
+}
+
+export const WORLD_MAP: WorldMap = buildWorld();
