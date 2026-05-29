@@ -55,4 +55,38 @@ if (existsSync(LOCAL_MUTE)) {
   console.warn('LOCAL_MUTE not found; skipping Doug + local asset copy');
 }
 
+// 4) Pixellab Wang tilesets (need PIXELLAB_TOKEN). Endpoint path is /tilesets/{id}, NOT /topdown-tilesets.
+//    NOTE tile sizes differ: soil = 16x16px, red-barren = 32x32px. The slicer must read tile_size
+//    from each metadata.json and scale to the world TILE size on draw.
+const PIXELLAB_API = 'https://api.pixellab.ai/mcp';
+const PIXELLAB_TOKEN = process.env.PIXELLAB_TOKEN;
+if (!PIXELLAB_TOKEN) {
+  console.warn('PIXELLAB_TOKEN not set — skipping Wang tileset fetch');
+} else {
+  const tilesets = [
+    { id: '398d7604-a3b6-4a60-aec9-6189893b9466', slug: 'soil' },        // 16x16
+    { id: 'df8064b8-65cc-47a7-87f4-086a6273d857', slug: 'red-barren' },  // 32x32
+  ];
+  const auth = { headers: { Authorization: `Bearer ${PIXELLAB_TOKEN}` } };
+  for (const t of tilesets) {
+    const dir = join(PUB, `tilesets/${t.slug}`);
+    await mkdir(dir, { recursive: true });
+    const img = await fetch(`${PIXELLAB_API}/tilesets/${t.id}/image`, auth);
+    if (!img.ok) throw new Error(`tileset ${t.slug} image -> ${img.status}`);
+    await writeFile(join(dir, 'image.png'), Buffer.from(await img.arrayBuffer()));
+    const meta = await fetch(`${PIXELLAB_API}/tilesets/${t.id}/metadata`, auth);
+    if (!meta.ok) throw new Error(`tileset ${t.slug} metadata -> ${meta.status}`);
+    await writeFile(join(dir, 'metadata.json'), Buffer.from(await meta.arrayBuffer()));
+    console.log('pixellab tileset', t.slug);
+  }
+}
+
+// 5) Bone-fragment / decoration overlay tiles (tiles_pro, 16 variations, 32x32).
+//    Served from public backblaze storage URLs — no auth needed.
+//    Variations: 0-2 bone fragments, mushroom cluster, rusted debris, crystal, puddle, flower patch, ...
+const BONE_BASE = 'https://backblaze.pixellab.ai/file/pixellab-tiles/080f7873-d1fc-444d-9aff-ee22b01a34da/e2b02fa7-12bc-46b7-a128-a80c81932f3d';
+for (let i = 0; i < 16; i++) {
+  await fetchTo(`${BONE_BASE}/tile_${i}.png`, join(PUB, `tilesets/bone-overlay/tile_${i}.png`));
+}
+
 console.log('asset fetch complete');
