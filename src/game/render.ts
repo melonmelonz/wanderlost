@@ -105,8 +105,10 @@ export function render(ctx: CanvasRenderingContext2D, world: World, player: Play
   // applied per-frame, so at varying frame times it scrolls the world unevenly and reads as chop
   // against Doug's constant-velocity walk. Snapping the camera to the player keeps Doug pinned
   // dead-centre while the ground scrolls in clean whole-pixel steps — crisp, never procedural.
-  cam.x = player.px + TILE / 2 - width / 2;
-  cam.y = player.py + TILE / 2 - height / 2;
+  // Clamp to the world so the cliff border frames the view instead of a black void at the edges.
+  const worldW = world.map.width * TILE, worldH = world.map.height * TILE;
+  cam.x = Math.max(0, Math.min(Math.max(0, worldW - width), player.px + TILE / 2 - width / 2));
+  cam.y = Math.max(0, Math.min(Math.max(0, worldH - height), player.py + TILE / 2 - height / 2));
   // Round to whole pixels so every sprite and tile shares the SAME integer offset (no +/-1px
   // sub-pixel shimmer between the player and the ground).
   const camX = Math.round(cam.x), camY = Math.round(cam.y);
@@ -146,17 +148,27 @@ export function render(ctx: CanvasRenderingContext2D, world: World, player: Play
   }
 
   // animated grass sway, overlaid on grass-ground tiles; dimmed once searched. Real pre-rendered
-  // frames stepped by clock — crisp 1:1 pixels, no shear/distortion. A per-tile frame offset keeps
-  // the field from pulsing in lockstep while each tuft still plays a clean, in-order loop.
+  // frames stepped by clock and drawn crisp at NATIVE size (no resample) anchored to the tile base,
+  // so tufts stand tall and overlap their neighbours — hiding the tile grid. The frame offset
+  // advances with position (tx+ty), so the whole field ripples as ONE slow travelling wind wave
+  // rather than every tuft flickering independently (which read as jarring noise). Alternate tiles
+  // are mirrored to break the repeating-sprite grid.
   for (let ty = minTy; ty <= maxTy; ty++) {
     for (let tx = minTx; tx <= maxTx; tx++) {
       if (world.groundAt(tx, ty) !== GroundType.Grass) continue;
-      const off = ((tx * 73856093) ^ (ty * 19349663)) >>> 0;
-      const frame = getImage(framePath(GRASS_SWAY, frameAt(GRASS_SWAY, now, off)));
+      const frame = getImage(framePath(GRASS_SWAY, frameAt(GRASS_SWAY, now, tx + ty)));
       if (!frame) continue;
       const sx = tx * TILE - camX, sy = ty * TILE - camY;
+      const dx = sx - (frame.width - TILE) / 2, dy = sy + TILE - frame.height; // base-anchored, centred
       ctx.globalAlpha = rc.grass.isRevealed(tx, ty) ? 0.4 : 0.85;
-      ctx.drawImage(frame, sx, sy - 4, TILE, TILE);
+      if ((((tx * 73856093) ^ (ty * 19349663)) & 1) === 1) {
+        ctx.save();
+        ctx.translate(sx * 2 + TILE, 0); ctx.scale(-1, 1); // mirror about the tile's own centre
+        ctx.drawImage(frame, dx, dy);
+        ctx.restore();
+      } else {
+        ctx.drawImage(frame, dx, dy);
+      }
       ctx.globalAlpha = 1;
     }
   }
@@ -192,16 +204,17 @@ export function render(ctx: CanvasRenderingContext2D, world: World, player: Play
     drawables.push({
       wy: o.ty * TILE + TILE,
       draw: () => {
-        const sx = o.tx * TILE - camX, sy = o.ty * TILE - camY;
-        const w = TILE * 1.5, h = TILE * 1.5;
-        const dx = sx - (w - TILE) / 2, dy = sy - (h - TILE);
         const img = o.kind === 'campfire'
           ? getImage(framePath(CAMPFIRE, frameAt(CAMPFIRE, now, (o.tx + o.ty) % CAMPFIRE.count)))
           : getImage(path!);
         if (!img) return; // assets are guaranteed at build time; no grey-block fallback
+        const sx = o.tx * TILE - camX, sy = o.ty * TILE - camY;
+        // Draw at the sprite's NATIVE pixel size (no resample) anchored base-centre on the tile.
+        // Forcing every prop to a fixed box resampled 64px and 32px art to crunchy, uneven edges.
+        const dx = sx - (img.width - TILE) / 2, dy = sy + TILE - img.height;
         groundShadow(ctx, sx + TILE / 2, sy + TILE - 3, TILE * 0.42, TILE * 0.16);
         ctx.globalAlpha = opened ? 0.65 : 1;
-        ctx.drawImage(img, dx, dy, w, h);
+        ctx.drawImage(img, dx, dy);
         ctx.globalAlpha = 1;
       },
     });

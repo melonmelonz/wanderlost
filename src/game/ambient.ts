@@ -4,7 +4,7 @@
 // No procedural shear/sine distortion: each frame is drawn crisp and 1:1.
 export interface FrameAnim { dir: string; count: number; fps: number; }
 
-export const GRASS_SWAY: FrameAnim = { dir: '/assets/grass/sway', count: 5, fps: 7 };
+export const GRASS_SWAY: FrameAnim = { dir: '/assets/grass/sway', count: 5, fps: 5 };
 export const CAMPFIRE: FrameAnim = { dir: '/assets/objects/campfire', count: 7, fps: 12 };
 
 export function framePath(a: FrameAnim, i: number): string { return `${a.dir}/${i}.png`; }

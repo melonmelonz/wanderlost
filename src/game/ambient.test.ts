@@ -12,7 +12,7 @@ describe('ambient frame animation', () => {
 
   it('advances frames over time and wraps within the loop', () => {
     expect(frameAt(GRASS_SWAY, 0)).toBe(0);
-    expect(frameAt(GRASS_SWAY, 1000 / 7)).toBe(1);          // one frame later at 7fps
+    expect(frameAt(GRASS_SWAY, 1000 / GRASS_SWAY.fps)).toBe(1); // one frame later, at the loop's fps
     expect(frameAt(GRASS_SWAY, 0)).toBeLessThan(GRASS_SWAY.count);
     expect(frameAt(GRASS_SWAY, 10_000)).toBeLessThan(GRASS_SWAY.count); // always in range
   });
