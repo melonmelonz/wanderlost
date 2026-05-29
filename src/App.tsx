@@ -12,28 +12,28 @@ export function App({ game }: { game: Game }) {
   const [started, setStarted] = useState(false);
   useEffect(() => subscribe(() => force(n => n + 1)), []);
 
-  // returning players (have a save) skip straight in; first-timers see the gate
+  // Doug-only demo: no character gate — boot straight into the game loop.
   useEffect(() => {
-    if (game.hasSave && !started) { game.begin(); setStarted(true); }
+    if (!started) { game.begin(); setStarted(true); }
   }, []);
-
-  const showGate = (!started && !game.hasSave) || hudState.characterSelectOpen;
 
   return (
     <>
       <HUD />
       <Inventory />
       <Dpad set={(dx, dy) => { game.input.touchDx = dx; game.input.touchDy = dy; }} onAction={() => game.input.onAction?.()} />
-      {showGate && (
-        <CharacterSelect
-          current={hudState.character}
-          onPick={(id) => {
-            game.setCharacter(id);
-            if (hudState.characterSelectOpen) closeCharacterSelect();
-            if (!started) { game.begin(); setStarted(true); }
-          }}
-        />
-      )}
+      <button
+        onClick={() => game.input.onMute?.()}
+        style={{
+          position: 'fixed', top: 10, left: 12, zIndex: 20,
+          background: 'rgba(0,0,0,0.45)', color: hudState.muted ? '#6a6358' : '#d4a437',
+          border: '1px solid rgba(212,164,55,0.4)', borderRadius: 6,
+          font: '10px "Space Mono", monospace', letterSpacing: '0.12em',
+          padding: '4px 8px', cursor: 'pointer',
+        }}
+      >
+        {hudState.muted ? 'sound: off' : 'sound: on'}
+      </button>
     </>
   );
 }

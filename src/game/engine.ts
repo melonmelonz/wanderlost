@@ -16,10 +16,9 @@ import { startAudio, toggleMute, setDuck, isMuted } from './audio';
 import { loadSave, writeSave, type SaveData } from './save';
 import { resolveStart } from './spawn';
 import {
-  addSpecimen, addJournal, showDayCard, showThought, setPeerCount, setMuted, setCharacter as hudSetCharacter,
+  addSpecimen, addJournal, showDayCard, setPeerCount, setMuted, setCharacter as hudSetCharacter,
   hydrateHud, toggleInventory, hudState,
 } from './hud-bus';
-import { THOUGHTS } from '../content/flavor-thoughts';
 import { DAY_LINES } from '../content/flavor-days';
 import { noteFor } from '../content/flavor-notes';
 import { pick, mulberry32, xmur3 } from './rng';
@@ -53,7 +52,7 @@ export function startEngine(canvas: HTMLCanvasElement): Game {
   log('engine-start', { seed: world.seed, spawn: world.spawn });
 
   const start = resolveStart(world, save); // ignore stale/out-of-bounds saved tiles
-  const player = new Player(start.tx, start.ty, save?.character ?? 'doug');
+  const player = new Player(start.tx, start.ty, 'doug'); // Doug-only demo: ignore any saved character
   const input = new Input();
   input.attach(); // register keyboard listeners (held set is read every frame via intent())
   input.paused = true; // gated until character chosen / begin()
@@ -145,8 +144,6 @@ export function startEngine(canvas: HTMLCanvasElement): Game {
   // game loop
   let raf = 0;
   let last = performance.now();
-  let idleMs = 0;
-  let lastThought = 0;
   const loop = (now: number) => {
     const dt = now - last; last = now;
     animClock += dt / 1000;
@@ -181,16 +178,8 @@ export function startEngine(canvas: HTMLCanvasElement): Game {
           pendingReveals.add(key); net.reveal(key, 'note');
           const text = noteFor(player.tx, player.ty);
           addJournal({ id: key, text, day: dayNumber(clockMs) });
-          showThought('a folded note. someone was here.');
         }
       }
-    }
-
-    // idle thoughts
-    if (player.sliding || input.intent().dx || input.intent().dy) { idleMs = 0; }
-    else idleMs += dt;
-    if (idleMs > 12000 && now - lastThought > 6000 && Math.random() < 0.02) {
-      showThought(pick(Math.random, THOUGHTS)); lastThought = now;
     }
 
     // day rollover

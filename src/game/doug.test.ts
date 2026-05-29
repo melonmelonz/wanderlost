@@ -29,6 +29,13 @@ describe('Player slide', () => {
     expect(p.tx).toBe(1); expect(p.ty).toBe(1);
   });
 
+  it('moves at constant velocity (linear) across the tile, not eased', () => {
+    const p = new Player(0, 0, 'doug');
+    p.startSlide(1, 0, 'east'); // 0 -> 32px over 140ms
+    p.update(70); // halfway in time
+    expect(p.px).toBeCloseTo(16, 5); // halfway in space => linear, no ease pulse
+  });
+
   it('ignores a new slide while already sliding', () => {
     const p = new Player(0, 0, 'doug');
     p.startSlide(1, 0, 'east');

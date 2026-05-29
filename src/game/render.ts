@@ -112,7 +112,8 @@ export function render(ctx: CanvasRenderingContext2D, world: World, player: Play
   for (const p of rc.peers.values()) {
     drawables.push({ wy: p.y + TILE, draw: () => drawSprite(ctx, p.char, indexDir(p.dir), p.x - cam.x, p.y - cam.y, p.name, rc.resolve, p.moving) });
   }
-  drawables.push({ wy: player.py + TILE, draw: () => drawSprite(ctx, player.character, player.facing, player.px - cam.x, player.py - cam.y, undefined, rc.resolve, player.sliding) });
+  const hop = -Math.sin(player.progress * Math.PI) * 3; // gentle per-step bounce, smooth regardless of frame count
+  drawables.push({ wy: player.py + TILE, draw: () => drawSprite(ctx, player.character, player.facing, player.px - cam.x, player.py - cam.y + hop, undefined, rc.resolve, player.sliding) });
   drawables.sort((a, b) => a.wy - b.wy);
   for (const d of drawables) d.draw();
 

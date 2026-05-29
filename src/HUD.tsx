@@ -24,16 +24,6 @@ export function HUD() {
       {hudState.muted && (
         <div style={{ position: 'fixed', top: 12, left: 14, fontSize: 10, color: '#6a6358' }}>muted</div>
       )}
-      {hudState.thought && (
-        <div style={{
-          position: 'fixed', left: '50%', bottom: '22%', transform: 'translateX(-50%)',
-          fontSize: 12, color: '#e2dac9', fontStyle: 'italic',
-          maxWidth: '60vw', textAlign: 'center',
-          textShadow: '0 0 3px #000, 0 1px 2px #000, 0 0 8px rgba(0,0,0,0.9)',
-        }}>
-          {hudState.thought}
-        </div>
-      )}
       {hudState.dayCard && (
         <div style={{
           position: 'fixed', left: '50%', top: '14%', transform: 'translateX(-50%)',

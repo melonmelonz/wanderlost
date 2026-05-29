@@ -19,6 +19,9 @@ export class Player {
     this.px = tx * TILE; this.py = ty * TILE;
   }
 
+  // 0..1 across the current tile step (0 when idle). Drives a procedural hop in the renderer.
+  get progress() { return this.sliding ? Math.min(1, this.elapsed / this.duration) : 0; }
+
   startSlide(ntx: number, nty: number, dir: Dir) {
     if (this.sliding) return;
     this.facing = dir;
@@ -34,10 +37,11 @@ export class Player {
   update(dtMs: number) {
     if (!this.sliding) return;
     this.elapsed += dtMs;
+    // Linear interpolation: constant velocity per tile so continuous walking is smooth.
+    // (Eased tweens pulse velocity to zero at every tile boundary, which reads as choppy.)
     const t = Math.min(1, this.elapsed / this.duration);
-    const e = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2; // easeInOutQuad
-    this.px = this.fromPx + (this.toPx - this.fromPx) * e;
-    this.py = this.fromPy + (this.toPy - this.fromPy) * e;
+    this.px = this.fromPx + (this.toPx - this.fromPx) * t;
+    this.py = this.fromPy + (this.toPy - this.fromPy) * t;
     if (t >= 1) {
       this.sliding = false;
       this.tx = this.pendingTx; this.ty = this.pendingTy;
