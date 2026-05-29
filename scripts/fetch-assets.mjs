@@ -1,12 +1,18 @@
 // scripts/fetch-assets.mjs
-import { mkdir, writeFile, copyFile, readdir } from 'node:fs/promises';
+// Build-time asset pull. Downloads EVERYTHING the game needs into public/assets/ so the
+// running game serves only local static files (no live PixelLab/mute-pixel fetches at runtime).
+import { mkdir, writeFile, copyFile, readdir, rm, rename } from 'node:fs/promises';
 import { join, dirname } from 'node:path';
 import { existsSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { tmpdir } from 'node:os';
 
 const ROOT = new URL('..', import.meta.url).pathname;
 const PUB = join(ROOT, 'public/assets');
 const MUTE_BASE = 'https://mute-pixel.pages.dev/assets';
 const LOCAL_MUTE = process.env.HOME + '/dev/mute-game/assets';
+const PIXELLAB_API = 'https://api.pixellab.ai/mcp';
+const PIXELLAB_TOKEN = process.env.PIXELLAB_TOKEN;
 
 const DIRS = ['south','south-east','east','north-east','north','north-west','west','south-west'];
 
@@ -28,14 +34,56 @@ async function copyTree(src, dest) {
   }
 }
 
-// 1) V2 characters
-for (const slug of ['crab-head-v2', 'green-alien-v2', 'red-hair-v2']) {
-  for (const dir of DIRS) {
-    const url = `${MUTE_BASE}/display/${slug}-${dir}.png`;
-    const dest = join(PUB, `characters/${slug}/rotations/${dir}.png`);
-    await fetchTo(url, dest);
+// 1) Characters — pulled from PixelLab as full character zips (rotations + walking frames).
+//    These are the canonical source art (the mute-pixel display PNGs had no walk cycles).
+//    Normalizes into: characters/{slug}/rotations/{dir}.png and characters/{slug}/walk/{dir}/{n}.png
+const CHARACTERS = [
+  { slug: 'crab-head-v2',   id: '19a81f05-f60c-4a7a-a582-194505d48a88' },
+  { slug: 'green-alien-v2', id: 'd9f23604-f47b-4c13-8802-30585cd70a20' },
+  { slug: 'red-hair-v2',    id: 'e0e0dba8-2feb-45ce-9865-b934db108a11' },
+  { slug: 'doug',           id: '5871ce77-b00c-4051-8868-ea0eb0ae5108' },
+];
+
+async function downloadCharacter({ slug, id }) {
+  if (!PIXELLAB_TOKEN) { console.warn(`PIXELLAB_TOKEN not set — skipping character ${slug}`); return; }
+  const zipPath = join(tmpdir(), `wl-${slug}.zip`);
+  const exDir = join(tmpdir(), `wl-${slug}`);
+  // download zip via pixellab download endpoint (auth required)
+  const res = await fetch(`${PIXELLAB_API}/characters/${id}/download`, {
+    headers: { Authorization: `Bearer ${PIXELLAB_TOKEN}` },
+  });
+  if (!res.ok) throw new Error(`character ${slug} download -> ${res.status}`);
+  await writeFile(zipPath, Buffer.from(await res.arrayBuffer()));
+  await rm(exDir, { recursive: true, force: true });
+  execFileSync('unzip', ['-o', '-q', zipPath, '-d', exDir]);
+  // the zip contains a top-level char dir (e.g. "Crab_Head/") alongside a metadata.json — pick the dir
+  const top = (await readdir(exDir, { withFileTypes: true })).find(e => e.isDirectory());
+  if (!top) throw new Error(`character ${slug}: no top-level dir in zip`);
+  const base = join(exDir, top.name);
+  // rotations
+  const rotSrc = join(base, 'rotations');
+  if (existsSync(rotSrc)) await copyTree(rotSrc, join(PUB, `characters/${slug}/rotations`));
+  // walking animation: animations/walking-XXXX/{dir}/frame_NNN.png -> walk/{dir}/{n}.png
+  const animsDir = join(base, 'animations');
+  if (existsSync(animsDir)) {
+    const walkDir = (await readdir(animsDir)).find(d => d.startsWith('walking'));
+    if (walkDir) {
+      for (const dir of await readdir(join(animsDir, walkDir))) {
+        const frames = (await readdir(join(animsDir, walkDir, dir))).filter(f => f.endsWith('.png')).sort();
+        const destDir = join(PUB, `characters/${slug}/walk/${dir}`);
+        await mkdir(destDir, { recursive: true });
+        for (let i = 0; i < frames.length; i++) {
+          await copyFile(join(animsDir, walkDir, dir, frames[i]), join(destDir, `${i}.png`));
+        }
+      }
+    }
   }
+  await rm(zipPath, { force: true });
+  await rm(exDir, { recursive: true, force: true });
+  console.log('character', slug, '(rotations + walk)');
 }
+
+for (const c of CHARACTERS) await downloadCharacter(c);
 
 // 2) Animated environmental GIFs
 await fetchTo(`${MUTE_BASE}/gifs/campfire-flicker.gif`, join(PUB, 'objects/campfire-flicker.gif'));
@@ -58,8 +106,6 @@ if (existsSync(LOCAL_MUTE)) {
 // 4) Pixellab Wang tilesets (need PIXELLAB_TOKEN). Endpoint path is /tilesets/{id}, NOT /topdown-tilesets.
 //    NOTE tile sizes differ: soil = 16x16px, red-barren = 32x32px. The slicer must read tile_size
 //    from each metadata.json and scale to the world TILE size on draw.
-const PIXELLAB_API = 'https://api.pixellab.ai/mcp';
-const PIXELLAB_TOKEN = process.env.PIXELLAB_TOKEN;
 if (!PIXELLAB_TOKEN) {
   console.warn('PIXELLAB_TOKEN not set — skipping Wang tileset fetch');
 } else {
