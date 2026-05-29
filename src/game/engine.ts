@@ -48,6 +48,7 @@ export function startEngine(canvas: HTMLCanvasElement): Game {
 
   const player = new Player(save?.tx ?? 0, save?.ty ?? 0, save?.character ?? 'doug');
   const input = new Input();
+  input.attach(); // register keyboard listeners (held set is read every frame via intent())
   input.paused = true; // gated until character chosen / begin()
   const cam: Camera = { x: player.px + TILE / 2 - canvas.width / 2, y: player.py + TILE / 2 - canvas.height / 2 };
 
