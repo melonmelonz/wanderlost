@@ -1,19 +1,16 @@
 // src/game/render.ts
-import { World, TILE, CHUNK } from './world';
-import type { Biome } from './world';
+import { World, TILE } from './world';
+import { GroundType } from './map-data';
 import { Player } from './doug';
 import { getImage, getWangTileset, cornerKey } from './assets';
 import type { Dir } from './assets';
 import { objectPath } from './objects';
+import { cornerUpper, UPPER_TERRAINS } from './terrain';
 import type { GrassState } from './grass';
 import type { OpenState } from './objects';
 import { phaseAt, nightStrength } from './daynight';
 import type { PeerState } from './peers';
 import { indexDir } from './peers';
-
-const BIOME_COLOR: Record<Biome, string> = { 'soil': '#2a241c', 'red-barren': '#3a201a' };
-const OSSUARY_TINT = 'rgba(200,190,170,0.10)';
-const GRASS_COLOR = '#1f3a1c';
 
 export interface Camera { x: number; y: number; }
 export interface PeerView { px: number; py: number; facing: string; character: string; name: string; }
@@ -56,68 +53,61 @@ export function render(ctx: CanvasRenderingContext2D, world: World, player: Play
   const maxTx = Math.ceil((cam.x + width) / TILE) + 1;
   const maxTy = Math.ceil((cam.y + height) / TILE) + 1;
 
-  // ground pass — Wang-blended tile art, else flat color; bone overlay on ossuary tiles
+  // ground pass — soil base, then each upper terrain corner-autotiled on top
+  const soilTs = getWangTileset('soil');
   for (let ty = minTy; ty <= maxTy; ty++) {
     for (let tx = minTx; tx <= maxTx; tx++) {
-      const t = world.tileAt(tx, ty);
       const sx = Math.round(tx * TILE - cam.x), sy = Math.round(ty * TILE - cam.y);
-      const ts = getWangTileset(t.biome);
-      const r = ts?.rects.get(cornerKey(
-        world.cornerUpper(t.biome, tx, ty), world.cornerUpper(t.biome, tx + 1, ty),
-        world.cornerUpper(t.biome, tx, ty + 1), world.cornerUpper(t.biome, tx + 1, ty + 1),
-      ));
-      if (ts && r) ctx.drawImage(ts.img, r[0], r[1], r[2], r[3], sx, sy, TILE, TILE);
-      else { ctx.fillStyle = BIOME_COLOR[t.biome]; ctx.fillRect(sx, sy, TILE, TILE); }
-      if (t.ossuary) {
-        const bi = (((tx * 7 + ty * 13) % 16) + 16) % 16;
-        const bone = getImage(`/assets/tilesets/bone-overlay/tile_${bi}.png`);
-        if (bone) ctx.drawImage(bone, sx, sy, TILE, TILE);
-        else { ctx.fillStyle = OSSUARY_TINT; ctx.fillRect(sx, sy, TILE, TILE); }
+      if (soilTs) {
+        const base = soilTs.rects.get(0) ?? soilTs.rects.values().next().value;
+        if (base) ctx.drawImage(soilTs.img, base[0], base[1], base[2], base[3], sx, sy, TILE, TILE);
+      }
+      for (const u of UPPER_TERRAINS) {
+        const ts = getWangTileset(u.slug);
+        if (!ts) continue;
+        const key = cornerKey(
+          cornerUpper(world, u.ground, tx, ty), cornerUpper(world, u.ground, tx + 1, ty),
+          cornerUpper(world, u.ground, tx, ty + 1), cornerUpper(world, u.ground, tx + 1, ty + 1),
+        );
+        if (key === 0) continue;
+        const r = ts.rects.get(key);
+        if (r) ctx.drawImage(ts.img, r[0], r[1], r[2], r[3], sx, sy, TILE, TILE);
       }
     }
   }
 
-  // grass pass (sprite if loaded, else block); dimmed once searched
+  // animated grass sway, overlaid on grass-ground tiles; dimmed once searched
   const grassImg = getImage('/assets/grass/grass-sway.gif');
-  for (let ty = minTy; ty <= maxTy; ty++) {
-    for (let tx = minTx; tx <= maxTx; tx++) {
-      const t = world.tileAt(tx, ty);
-      if (!t.grass) continue;
-      const sx = Math.round(tx * TILE - cam.x), sy = Math.round(ty * TILE - cam.y);
-      const searched = rc.grass.isRevealed(tx, ty);
-      ctx.globalAlpha = searched ? 0.5 : 1;
-      if (grassImg) ctx.drawImage(grassImg, sx, sy - 4, TILE, TILE);
-      else { ctx.fillStyle = GRASS_COLOR; ctx.fillRect(sx + 6, sy + 6, TILE - 12, TILE - 12); }
-      ctx.globalAlpha = 1;
+  if (grassImg) {
+    for (let ty = minTy; ty <= maxTy; ty++) {
+      for (let tx = minTx; tx <= maxTx; tx++) {
+        if (world.groundAt(tx, ty) !== GroundType.Grass) continue;
+        const sx = Math.round(tx * TILE - cam.x), sy = Math.round(ty * TILE - cam.y);
+        ctx.globalAlpha = rc.grass.isRevealed(tx, ty) ? 0.4 : 0.85;
+        ctx.drawImage(grassImg, sx, sy - 4, TILE, TILE);
+        ctx.globalAlpha = 1;
+      }
     }
   }
 
-  // y-sorted drawable list: world objects + peers + local player
+  // y-sorted drawables: authored props/scenes + peers + local player
   const drawables: Drawable[] = [];
-  const cMinX = Math.floor(minTx / CHUNK), cMaxX = Math.floor(maxTx / CHUNK);
-  const cMinY = Math.floor(minTy / CHUNK), cMaxY = Math.floor(maxTy / CHUNK);
-  for (let cy = cMinY; cy <= cMaxY; cy++) {
-    for (let cx = cMinX; cx <= cMaxX; cx++) {
-      for (const o of world.getChunk(cx, cy).objects) {
-        const opened = o.kind === 'chest' && rc.open.isOpen(o.tx, o.ty);
-        const path = objectPath(o.kind, o.variant);
-        const wy = o.ty * TILE + TILE;
-        drawables.push({
-          wy, draw: () => {
-            const img = getImage(path);
-            const sx = Math.round(o.tx * TILE - cam.x), sy = Math.round(o.ty * TILE - cam.y);
-            if (img) {
-              const w = TILE * 1.5, h = TILE * 1.5;
-              ctx.globalAlpha = opened ? 0.65 : 1;
-              ctx.drawImage(img, sx - (w - TILE) / 2, sy - (h - TILE), w, h);
-              ctx.globalAlpha = 1;
-            } else {
-              ctx.fillStyle = '#555'; ctx.fillRect(sx + 4, sy + 4, TILE - 8, TILE - 8);
-            }
-          },
-        });
-      }
-    }
+  for (const o of world.drawables()) {
+    if (o.tx < minTx - 2 || o.tx > maxTx + 2 || o.ty < minTy - 2 || o.ty > maxTy + 2) continue;
+    const opened = o.kind === 'chest' && rc.open.isOpen(o.tx, o.ty);
+    const path = objectPath(o.kind, o.variant);
+    drawables.push({
+      wy: o.ty * TILE + TILE,
+      draw: () => {
+        const img = getImage(path);
+        if (!img) return; // assets are guaranteed at build time; no grey-block fallback
+        const sx = Math.round(o.tx * TILE - cam.x), sy = Math.round(o.ty * TILE - cam.y);
+        const w = TILE * 1.5, h = TILE * 1.5;
+        ctx.globalAlpha = opened ? 0.65 : 1;
+        ctx.drawImage(img, sx - (w - TILE) / 2, sy - (h - TILE), w, h);
+        ctx.globalAlpha = 1;
+      },
+    });
   }
   for (const p of rc.peers.values()) {
     drawables.push({ wy: p.y + TILE, draw: () => drawSprite(ctx, p.char, indexDir(p.dir), p.x - cam.x, p.y - cam.y, p.name, rc.resolve, p.moving) });
@@ -130,16 +120,14 @@ export function render(ctx: CanvasRenderingContext2D, world: World, player: Play
   const night = nightStrength(rc.clockMs);
   if (night > 0.05) {
     ctx.globalCompositeOperation = 'lighter';
-    for (let cy = cMinY; cy <= cMaxY; cy++) for (let cx = cMinX; cx <= cMaxX; cx++) {
-      for (const o of world.getChunk(cx, cy).objects) {
-        if (o.kind !== 'campfire') continue;
-        const sx = o.tx * TILE - cam.x + TILE / 2, sy = o.ty * TILE - cam.y + TILE / 2;
-        const rad = 70 + Math.sin(rc.clockMs / 120) * 6;
-        const g = ctx.createRadialGradient(sx, sy, 0, sx, sy, rad);
-        g.addColorStop(0, `rgba(255,180,80,${0.5 * night})`);
-        g.addColorStop(1, 'rgba(255,180,80,0)');
-        ctx.fillStyle = g; ctx.beginPath(); ctx.arc(sx, sy, rad, 0, Math.PI * 2); ctx.fill();
-      }
+    for (const o of world.drawables()) {
+      if (o.kind !== 'campfire') continue;
+      const sx = o.tx * TILE - cam.x + TILE / 2, sy = o.ty * TILE - cam.y + TILE / 2;
+      const rad = 70 + Math.sin(rc.clockMs / 120) * 6;
+      const g = ctx.createRadialGradient(sx, sy, 0, sx, sy, rad);
+      g.addColorStop(0, `rgba(255,180,80,${0.5 * night})`);
+      g.addColorStop(1, 'rgba(255,180,80,0)');
+      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(sx, sy, rad, 0, Math.PI * 2); ctx.fill();
     }
     ctx.globalCompositeOperation = 'source-over';
   }
@@ -171,7 +159,7 @@ function drawSprite(
   const src = resolve?.(character, facing, moving) ?? `/assets/characters/${character}/rotations/${facing}.png`;
   const img = getImage(src) ?? getImage(`/assets/characters/${character}/rotations/${facing}.png`);
   if (img) ctx.drawImage(img, Math.round(sx) - 8, Math.round(sy) - 16, 48, 48);
-  else { ctx.fillStyle = '#d4a437'; ctx.fillRect(Math.round(sx), Math.round(sy), TILE, TILE); }
+  // else: asset missing at build time — nothing drawn (build should have failed first)
   if (name) {
     ctx.font = '8px "Space Mono", monospace';
     ctx.fillStyle = 'rgba(0,220,255,0.7)';
