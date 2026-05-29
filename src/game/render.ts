@@ -38,6 +38,22 @@ function ensureStars(w: number, h: number) {
   for (let i = 0; i < 220; i++) stars.push({ x: rnd() * w, y: rnd() * h * 0.7, r: rnd() < 0.85 ? 0.7 : 1.4 });
 }
 
+// Distant birds drifting across the sky (screen-space, slow parallax). Daytime only. Each is a
+// tiny chevron whose wings flap by easing the apex up and down — classic pixel-bird, no bitmaps.
+let birds: { x: number; y: number; v: number; ph: number; size: number }[] | null = null;
+function ensureBirds(w: number, h: number) {
+  if (birds) return;
+  birds = [];
+  let seed = 70707;
+  const rnd = () => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed / 0x7fffffff; };
+  for (let i = 0; i < 9; i++) {
+    birds.push({
+      x: rnd() * w, y: 30 + rnd() * h * 0.3,
+      v: 14 + rnd() * 10, ph: rnd() * Math.PI * 2, size: 3 + Math.floor(rnd() * 2),
+    });
+  }
+}
+
 // World-space fireflies, scattered once over grass tiles. They only glow at dusk/night.
 let fireflies: { x: number; y: number; ph: number }[] | null = null;
 function ensureFireflies(world: World) {
@@ -260,6 +276,28 @@ export function render(ctx: CanvasRenderingContext2D, world: World, player: Play
       ctx.fillRect(Math.round(sx), Math.round(sy), 1, 1); ctx.globalAlpha = 1;
     }
     ctx.globalCompositeOperation = 'source-over';
+  }
+
+  // distant birds drifting across the sky — daytime only, slow parallax against the camera
+  const sky = 1 - nightStrength(rc.clockMs);
+  if (sky > 0.2) {
+    ensureBirds(width, height);
+    const t = now / 1000;
+    ctx.save();
+    ctx.strokeStyle = `rgba(40,45,60,${0.5 * sky})`;
+    ctx.lineWidth = 1;
+    for (const b of birds!) {
+      const x = ((b.x + b.v * t - camX * 0.05) % (width + 40) + width + 40) % (width + 40) - 20;
+      const y = b.y - (camY * 0.05) % (height * 0.4); // gentle vertical parallax, stays up high
+      const flap = Math.sin(t * 6 + b.ph) * 0.5 + 0.5; // 0 wings-down, 1 wings-up
+      const apex = b.size * (0.3 + flap * 0.9);
+      ctx.beginPath();
+      ctx.moveTo(x - b.size, y);
+      ctx.lineTo(x, y - apex);
+      ctx.lineTo(x + b.size, y);
+      ctx.stroke();
+    }
+    ctx.restore();
   }
 
   // day/night tint + starfield
