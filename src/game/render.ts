@@ -101,13 +101,14 @@ interface Drawable { wy: number; draw(): void; }
 
 export function render(ctx: CanvasRenderingContext2D, world: World, player: Player, cam: Camera, rc: RenderCtx) {
   const { width, height } = ctx.canvas;
-  const targetX = player.px + TILE / 2 - width / 2;
-  const targetY = player.py + TILE / 2 - height / 2;
-  cam.x += (targetX - cam.x) * 0.12; // gentle follow — a touch smoother than a hard snap
-  cam.y += (targetY - cam.y) * 0.12;
-  // Draw against a whole-pixel camera. The smoothed cam stays fractional for state, but every
-  // sprite and tile is offset by the SAME integer, so the player never shimmers +/-1px against
-  // the ground (independent rounding of fractional offsets was a big source of the jitter).
+  // Camera locked hard to the player — no easing. Exponential follow (cam += (target-cam)*k) is
+  // applied per-frame, so at varying frame times it scrolls the world unevenly and reads as chop
+  // against Doug's constant-velocity walk. Snapping the camera to the player keeps Doug pinned
+  // dead-centre while the ground scrolls in clean whole-pixel steps — crisp, never procedural.
+  cam.x = player.px + TILE / 2 - width / 2;
+  cam.y = player.py + TILE / 2 - height / 2;
+  // Round to whole pixels so every sprite and tile shares the SAME integer offset (no +/-1px
+  // sub-pixel shimmer between the player and the ground).
   const camX = Math.round(cam.x), camY = Math.round(cam.y);
 
   const now = performance.now(); // continuous clock for ambient sway/glow (independent of day clock)

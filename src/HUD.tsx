@@ -21,9 +21,6 @@ export function HUD() {
           {hudState.peerCount} other{hudState.peerCount === 1 ? '' : 's'} out here
         </div>
       )}
-      {hudState.muted && (
-        <div style={{ position: 'fixed', top: 12, left: 14, fontSize: 10, color: '#6a6358' }}>muted</div>
-      )}
       {hudState.interact && (
         <div style={{
           position: 'fixed', left: '50%', bottom: '12%', transform: 'translateX(-50%)',
