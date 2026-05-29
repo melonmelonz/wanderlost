@@ -27,8 +27,9 @@ export function HUD() {
       {hudState.thought && (
         <div style={{
           position: 'fixed', left: '50%', bottom: '22%', transform: 'translateX(-50%)',
-          fontSize: 11, color: '#9a9080', fontStyle: 'italic', opacity: 0.85,
-          maxWidth: '60vw', textAlign: 'center', textShadow: '0 1px 6px #000',
+          fontSize: 12, color: '#e2dac9', fontStyle: 'italic',
+          maxWidth: '60vw', textAlign: 'center',
+          textShadow: '0 0 3px #000, 0 1px 2px #000, 0 0 8px rgba(0,0,0,0.9)',
         }}>
           {hudState.thought}
         </div>

@@ -14,6 +14,7 @@ import { Net, tileKey } from './net';
 import { Peers, dirIndex } from './peers';
 import { startAudio, toggleMute, setDuck, isMuted } from './audio';
 import { loadSave, writeSave, type SaveData } from './save';
+import { resolveStart } from './spawn';
 import {
   addSpecimen, addJournal, showDayCard, showThought, setPeerCount, setMuted, setCharacter as hudSetCharacter,
   hydrateHud, toggleInventory, hudState,
@@ -51,7 +52,8 @@ export function startEngine(canvas: HTMLCanvasElement): Game {
   let world = new World(1337); // default seed; the shared seed from net `welcome` overrides
   log('engine-start', { seed: world.seed, spawn: world.spawn });
 
-  const player = new Player(save?.tx ?? world.spawn.tx, save?.ty ?? world.spawn.ty, save?.character ?? 'doug');
+  const start = resolveStart(world, save); // ignore stale/out-of-bounds saved tiles
+  const player = new Player(start.tx, start.ty, save?.character ?? 'doug');
   const input = new Input();
   input.attach(); // register keyboard listeners (held set is read every frame via intent())
   input.paused = true; // gated until character chosen / begin()
