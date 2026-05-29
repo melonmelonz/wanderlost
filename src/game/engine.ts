@@ -1,5 +1,7 @@
 // src/game/engine.ts
-import { World, TILE, CHUNK } from './world';
+import { World, TILE } from './world';
+import { canStep } from './collision';
+import { GROUND_TILESETS } from './terrain';
 import { Player } from './doug';
 import { Input, vecToDir } from './input';
 import { render, type Camera } from './render';
@@ -46,7 +48,7 @@ export function startEngine(canvas: HTMLCanvasElement): Game {
   const save = loadSave();
   let world = new World(1337); // default seed; the shared seed from net `welcome` overrides
 
-  const player = new Player(save?.tx ?? 0, save?.ty ?? 0, save?.character ?? 'doug');
+  const player = new Player(save?.tx ?? world.spawn.tx, save?.ty ?? world.spawn.ty, save?.character ?? 'doug');
   const input = new Input();
   input.attach(); // register keyboard listeners (held set is read every frame via intent())
   input.paused = true; // gated until character chosen / begin()
@@ -68,10 +70,8 @@ export function startEngine(canvas: HTMLCanvasElement): Game {
   }
 
   // assets
-  loadWangTileset('soil').catch(() => {});
-  loadWangTileset('red-barren').catch(() => {});
+  for (const slug of GROUND_TILESETS) loadWangTileset(slug).catch(() => {});
   preloadAll([
-    ...Array.from({ length: 16 }, (_, i) => `/assets/tilesets/bone-overlay/tile_${i}.png`),
     '/assets/grass/grass-sway.gif',
     '/assets/objects/campfire-flicker.gif',
     ...allObjectSources(),
@@ -149,7 +149,10 @@ export function startEngine(canvas: HTMLCanvasElement): Game {
     if (!player.sliding && !input.paused) {
       const { dx, dy } = input.intent();
       const dir = vecToDir(dx, dy);
-      if (dir) { player.startSlide(player.tx + dx, player.ty + dy, dir); startAudio(); }
+      if (dir && canStep(world, player.tx, player.ty, dx, dy)) {
+        player.startSlide(player.tx + dx, player.ty + dy, dir);
+        startAudio();
+      }
     }
 
     const wasSliding = player.sliding;
@@ -157,8 +160,7 @@ export function startEngine(canvas: HTMLCanvasElement): Game {
     if (wasSliding && !player.sliding) {
       // arrived on a tile
       net.move(player.tx * TILE, player.ty * TILE, dirIndex(player.facing), false);
-      const tile = world.tileAt(player.tx, player.ty);
-      if (tile.grass && !grass.isRevealed(player.tx, player.ty)) {
+      if (world.isGrass(player.tx, player.ty) && !grass.isRevealed(player.tx, player.ty)) {
         const key = tileKey(player.tx, player.ty);
         const result = rollReveal(world.seed, player.tx, player.ty);
         grass.set(player.tx, player.ty, result);
@@ -188,7 +190,6 @@ export function startEngine(canvas: HTMLCanvasElement): Game {
     updateDuck(clockMs);
 
     peers.update(dt);
-    world.evictOutside(Math.floor(player.tx / CHUNK), Math.floor(player.ty / CHUNK), 3);
     render(ctx, world, player, cam, { clockMs, grass, open, peers: peers.map, resolve });
     raf = requestAnimationFrame(loop);
   };
@@ -241,8 +242,7 @@ function facingVec(d: Dir): [number, number] {
 }
 
 function findChest(world: World, tx: number, ty: number) {
-  const cx = Math.floor(tx / CHUNK), cy = Math.floor(ty / CHUNK);
-  return world.getChunk(cx, cy).objects.find(o => o.kind === 'chest' && o.tx === tx && o.ty === ty);
+  return world.drawables().find(o => o.kind === 'chest' && o.tx === tx && o.ty === ty);
 }
 
 let duckPhase = '';
