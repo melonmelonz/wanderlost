@@ -24,14 +24,14 @@ export class Input {
   touchDx = 0; touchDy = 0;
 
   attach() {
-    addEventListener('keydown', e => {
+    addEventListener('keydown', (e: KeyboardEvent) => {
       const k = e.key.toLowerCase();
       this.held.add(k);
       if (k === 'e' || k === ' ') this.onAction?.();
       if (k === 'i' || k === 'tab') { e.preventDefault(); this.onToggleInventory?.(); }
       if (k === 'm') this.onMute?.();
     });
-    addEventListener('keyup', e => this.held.delete(e.key.toLowerCase()));
+    addEventListener('keyup', (e: KeyboardEvent) => this.held.delete(e.key.toLowerCase()));
     addEventListener('blur', () => this.held.clear());
   }
 

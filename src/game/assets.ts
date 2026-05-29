@@ -58,3 +58,47 @@ export function characterSources(slug: string): string[] {
   const a = characterAssets(slug);
   return [...Object.values(a.rotations), ...Object.values(a.walk).flat()];
 }
+
+// ---- Wang tilesets (pixellab `tileset15` format) -------------------------------------------
+// Each tileset blends two terrains ("lower" / "upper") across tile corners. We index every tile
+// by its 4-corner signature so the renderer can pick the right blend for any corner pattern.
+export type Corner = 0 | 1; // 0 = lower, 1 = upper
+export interface WangTileset {
+  img: HTMLImageElement;
+  tileSize: number;
+  // key = NW | NE<<1 | SW<<2 | SE<<3  ->  source rect [x,y,w,h]
+  rects: Map<number, [number, number, number, number]>;
+}
+
+export function cornerKey(nw: Corner, ne: Corner, sw: Corner, se: Corner): number {
+  return nw | (ne << 1) | (sw << 2) | (se << 3);
+}
+
+const tilesetCache = new Map<string, WangTileset>();
+
+interface WangMetaTile {
+  corners: { NE: string; NW: string; SE: string; SW: string };
+  bounding_box: { x: number; y: number; width: number; height: number };
+}
+
+export async function loadWangTileset(slug: string): Promise<WangTileset> {
+  const hit = tilesetCache.get(slug);
+  if (hit) return hit;
+  const [img, meta] = await Promise.all([
+    loadImage(`/assets/tilesets/${slug}/image.png`),
+    fetch(`/assets/tilesets/${slug}/metadata.json`).then(r => r.json()),
+  ]);
+  const tileSize: number = meta.tile_size?.width ?? meta.tileset_data?.tile_size?.width ?? 32;
+  const rects = new Map<number, [number, number, number, number]>();
+  const u = (s: string): Corner => (s === 'upper' ? 1 : 0);
+  for (const t of meta.tileset_data.tiles as WangMetaTile[]) {
+    const k = cornerKey(u(t.corners.NW), u(t.corners.NE), u(t.corners.SW), u(t.corners.SE));
+    const b = t.bounding_box;
+    rects.set(k, [b.x, b.y, b.width, b.height]);
+  }
+  const ts: WangTileset = { img, tileSize, rects };
+  tilesetCache.set(slug, ts);
+  return ts;
+}
+
+export function getWangTileset(slug: string): WangTileset | undefined { return tilesetCache.get(slug); }

@@ -1,7 +1,7 @@
 // src/game/world.ts
 // Deterministic chunked world. Every client generates the identical world from the seed;
 // the network only carries who-moved and what's-been-found.
-import { chunkRng, randInt } from './rng';
+import { chunkRng, randInt, xmur3, mulberry32 } from './rng';
 
 export const TILE = 32;
 export const CHUNK = 16; // tiles per chunk side
@@ -23,6 +23,22 @@ export interface Chunk { cx: number; cy: number; tiles: Tile[]; objects: WorldOb
 function biomeNoise(seed: number, cx: number, cy: number): number {
   const r = chunkRng(seed ^ 0x9e3779b9, Math.floor(cx / 3), Math.floor(cy / 3));
   return r();
+}
+
+// Value-noise lattice sample in [0,1), stable per (seed,biome,gx,gy).
+function lattice(seed: number, biome: string, gx: number, gy: number): number {
+  return mulberry32(xmur3(`${seed}|${biome}|${gx}|${gy}`)())();
+}
+
+// Bilinearly-interpolated smooth noise over a 4-corner-unit lattice.
+function smoothNoise(seed: number, biome: string, x: number, y: number): number {
+  const s = 4;
+  const gx = Math.floor(x / s), gy = Math.floor(y / s);
+  const fx = x / s - gx, fy = y / s - gy;
+  const a = lattice(seed, biome, gx, gy), b = lattice(seed, biome, gx + 1, gy);
+  const c = lattice(seed, biome, gx, gy + 1), d = lattice(seed, biome, gx + 1, gy + 1);
+  const u = fx * fx * (3 - 2 * fx), v = fy * fy * (3 - 2 * fy); // smoothstep
+  return (a * (1 - u) + b * u) * (1 - v) + (c * (1 - u) + d * u) * v;
 }
 
 export class World {
@@ -79,6 +95,12 @@ export class World {
     place('pod', 0.05, 2);
     place('terminal', 0.03, 4);
     return { cx, cy, tiles, objects };
+  }
+
+  // Per-corner terrain for Wang blending. Smooth value noise -> contiguous "upper" pools
+  // (glowing water on soil, cracked veins on red-barren) instead of salt-and-pepper.
+  cornerUpper(biome: Biome, cx: number, cy: number): 0 | 1 {
+    return smoothNoise(this.seed, biome, cx, cy) > 0.62 ? 1 : 0;
   }
 
   tileAt(tx: number, ty: number): Tile {
