@@ -11,7 +11,9 @@ export type PropKind =
   | 'terminal' | 'jellyfish' | 'signpost' | 'bench' | 'bedroll' | 'mushroom'
   | 'flower' | 'boulder' | 'skeleton' | 'bones' | 'statue' | 'scrap' | 'gem';
 
-export type SceneKind = 'rest-stop' | 'ruin-field' | 'crash-site' | 'grove' | 'bone-bed';
+export type SceneKind =
+  | 'rest-stop' | 'ruin-field' | 'crash-site' | 'grove' | 'bone-bed'
+  | 'marsh' | 'overlook' | 'crystal-hollow';
 
 export interface PlacedProp { kind: PropKind; tx: number; ty: number; variant: number; blocked: boolean; }
 export interface PlacedScene { kind: SceneKind; tx: number; ty: number; }
@@ -156,6 +158,36 @@ export const SCENE_DEFS: Record<SceneKind, SceneDef> = {
       { kind: 'chest', dx: 2, dy: 0, variant: 0 },
     ],
   },
+  'marsh': {
+    ground: [{ dx: -3, dy: -3, w: 7, h: 7, g: GroundType.Grass }],
+    props: [
+      { kind: 'jellyfish', dx: 0, dy: 0, variant: 0 },
+      { kind: 'jellyfish', dx: 2, dy: 1, variant: 1 },
+      { kind: 'mushroom', dx: -2, dy: 1, variant: 0 },
+      { kind: 'mushroom', dx: 1, dy: -2, variant: 1 },
+      { kind: 'flower', dx: -1, dy: 2, variant: 0 },
+    ],
+  },
+  'overlook': {
+    ground: [{ dx: -3, dy: -2, w: 7, h: 5, g: GroundType.StonePath }],
+    props: [
+      { kind: 'antenna', dx: 0, dy: 0, blocked: true },
+      { kind: 'terminal', dx: 2, dy: 1, variant: 1 },
+      { kind: 'gem', dx: -2, dy: 1, variant: 0 },
+      { kind: 'boulder', dx: -1, dy: -1, variant: 0, blocked: true },
+      { kind: 'scrap', dx: 1, dy: -1, variant: 0 },
+    ],
+  },
+  'crystal-hollow': {
+    props: [
+      { kind: 'gem', dx: 0, dy: 0, variant: 0 },
+      { kind: 'gem', dx: 2, dy: 1, variant: 0 },
+      { kind: 'gem', dx: -2, dy: -1, variant: 0 },
+      { kind: 'mushroom', dx: 1, dy: -2, variant: 1 },
+      { kind: 'mushroom', dx: -1, dy: 2, variant: 0 },
+      { kind: 'pod', dx: 2, dy: -2, variant: 1 },
+    ],
+  },
 };
 
 export function expandScene(s: PlacedScene): PlacedProp[] {
@@ -236,6 +268,36 @@ function buildWorld(): WorldMap {
   b.prop('bedroll', 16, C + 5, 0).prop('boulder', 30, C - 6, 0, true);
   // mid-spoke cluster
   b.prop('signpost', 46, C - 3, 0, true).prop('bench', 48, C + 2, 0, true);
+
+  // --- Diagonal quadrants between the spokes: four side-zones to reward wandering off-path -----
+  // Northwest: a marsh — grass fringe around still water pools, drifting jellyfish.
+  b.blob(28, 30, 9, GroundType.Grass, 301);
+  pond(24, 25, 3, 307);
+  pond(34, 34, 3, 311);
+  b.scene('marsh', 28, 30);
+  b.prop('mushroom', 21, 34, 0).prop('flower', 35, 26, 1).prop('jellyfish', 26, 38, 2);
+  b.prop('signpost', 44, 44, 0, true); // trail marker off the plaza's NW corner
+
+  // Northeast: an overlook ridge — antenna mast, data terminal, a vein of gems in the barrens.
+  b.blob(98, 30, 10, GroundType.RedBarren, 331);
+  b.scene('overlook', 98, 30);
+  b.prop('boulder', 91, 36, 1, true).prop('boulder', 106, 23, 0, true);
+  b.prop('gem', 104, 34, 0).prop('scrap', 90, 27, 1);
+  b.prop('signpost', 84, 44, 0, true); // trail marker off the plaza's NE corner
+
+  // Southeast: a crystal hollow — gem clusters and glowing caps ringing a small grass pool.
+  b.blob(98, 98, 8, GroundType.Grass, 351);
+  pond(105, 104, 3, 357);
+  b.scene('crystal-hollow', 96, 96);
+  b.prop('gem', 92, 104, 0).prop('mushroom', 104, 92, 1).prop('boulder', 89, 91, 0, true);
+  b.prop('signpost', 84, 84, 0, true); // trail marker off the plaza's SE corner
+
+  // Southwest: a wild overgrown grove — feral trees, mossy stumps, blooms underfoot.
+  b.blob(30, 98, 11, GroundType.Grass, 371);
+  b.scene('grove', 30, 96);
+  b.prop('tree', 23, 102, 2, true).prop('tree', 37, 92, 0, true).prop('tree', 35, 105, 1, true);
+  b.prop('stump', 25, 93, 0).prop('mushroom', 33, 101, 0).prop('flower', 21, 100, 1).prop('flower', 37, 99, 0);
+  b.prop('signpost', 44, 84, 0, true); // trail marker off the plaza's SW corner
 
   // --- spawn hub plaza + four stone-path spokes -----------------------------------------------
   b.fillRect(C - 4, C - 4, 9, 9, GroundType.StonePath);  // plaza

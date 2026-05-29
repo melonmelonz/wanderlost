@@ -102,4 +102,16 @@ describe('authored world map', () => {
     expect(WORLD_MAP.props.some(p => p.kind === 'campfire')).toBe(false);
     expect(WORLD_MAP.scenes.some(s => s.kind === 'rest-stop')).toBe(true);
   });
+
+  it('the diagonal quadrants are populated with side-zone scenes', () => {
+    const kinds = new Set(WORLD_MAP.scenes.map(s => s.kind));
+    for (const k of ['marsh', 'overlook', 'crystal-hollow'] as const) expect(kinds.has(k)).toBe(true);
+    // each diagonal quadrant (between the cardinal spokes) holds at least one scene anchor
+    const quad = (x0: number, x1: number, y0: number, y1: number) =>
+      WORLD_MAP.scenes.some(s => s.tx >= x0 && s.tx < x1 && s.ty >= y0 && s.ty < y1);
+    expect(quad(8, 56, 8, 56)).toBe(true);    // NW
+    expect(quad(72, 120, 8, 56)).toBe(true);  // NE
+    expect(quad(72, 120, 72, 120)).toBe(true); // SE
+    expect(quad(8, 56, 72, 120)).toBe(true);  // SW
+  });
 });
