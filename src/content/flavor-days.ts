@@ -1,0 +1,23 @@
+// src/content/flavor-days.ts
+export const DAY_LINES: ((d: number) => string)[] = [
+  (d) => `Day ${d}. The light came back. It always does. So far.`,
+  (d) => `Day ${d}. Today, the same as yesterday.`,
+  (d) => `Day ${d}. He has stopped counting, but the counter has not.`,
+  (d) => `Day ${d}. Something moved. It was me.`,
+  (d) => `Day ${d}. Still bright. Still here.`,
+  (d) => `Day ${d}. The suns rose without asking.`,
+  (d) => `Day ${d}. Another lap around the same nothing.`,
+  (d) => `Day ${d}. He woke facing a direction. He went that way.`,
+  (d) => `Day ${d}. The grass forgave the night.`,
+  (d) => `Day ${d}. No new ridges. Same old infinity.`,
+  (d) => `Day ${d}. The dark let go. Reluctantly.`,
+  (d) => `Day ${d}. He found a note. It was older than the planet, somehow.`,
+  (d) => `Day ${d}. Walking is a kind of staying still, out here.`,
+  (d) => `Day ${d}. The horizon is exactly where he left it.`,
+  (d) => `Day ${d}. Morning, again, with no opinion on the matter.`,
+  (d) => `Day ${d}. He is further than yesterday and no closer to anything.`,
+  (d) => `Day ${d}. The plain remembers him. It pretends not to.`,
+  (d) => `Day ${d}. Light. Then more light. Then on.`,
+  (d) => `Day ${d}. He keeps a tally only the planet can read.`,
+  (d) => `Day ${d}. And still: the next ridge.`,
+];

@@ -3,8 +3,8 @@
 import type { Dir } from './assets';
 import { TILE } from './world';
 
-const CARDINAL_MS = 140;
-const DIAGONAL_MS = 198; // ~140 * sqrt(2): feels uniform-speed in both axes
+export const CARDINAL_MS = 140;
+export const DIAGONAL_MS = 198; // ~140 * sqrt(2): feels uniform-speed in both axes
 
 export class Player {
   facing: Dir = 'south';

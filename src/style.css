@@ -4,4 +4,7 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: #000; }
 body { font-family: 'Space Mono', monospace; color: #e8e0d0; image-rendering: pixelated; }
 #root { position: fixed; inset: 0; z-index: 10; pointer-events: none; }
 #root > * { pointer-events: auto; }
-#game { position: fixed; inset: 0; z-index: 1; display: block; }
+#game { position: fixed; inset: 0; z-index: 1; display: block; image-rendering: pixelated; }
+img { image-rendering: pixelated; }
+@keyframes wl-fade { 0% { opacity: 0; } 15% { opacity: 1; } 80% { opacity: 1; } 100% { opacity: 0; } }
+button { font-family: 'Space Mono', monospace; }
