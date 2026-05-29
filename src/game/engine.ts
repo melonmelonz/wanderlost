@@ -22,6 +22,7 @@ import { THOUGHTS } from '../content/flavor-thoughts';
 import { DAY_LINES } from '../content/flavor-days';
 import { noteFor } from '../content/flavor-notes';
 import { pick, mulberry32, xmur3 } from './rng';
+import { makeLogger, debugEnabled } from './debug';
 
 const WALK_FPS = 10;
 
@@ -45,8 +46,10 @@ export function startEngine(canvas: HTMLCanvasElement): Game {
   resize();
   addEventListener('resize', resize);
 
+  const log = makeLogger(debugEnabled());
   const save = loadSave();
   let world = new World(1337); // default seed; the shared seed from net `welcome` overrides
+  log('engine-start', { seed: world.seed, spawn: world.spawn });
 
   const player = new Player(save?.tx ?? world.spawn.tx, save?.ty ?? world.spawn.ty, save?.character ?? 'doug');
   const input = new Input();
@@ -93,9 +96,10 @@ export function startEngine(canvas: HTMLCanvasElement): Game {
   const pendingReveals = new Set<string>();
   const net = new Net({
     onWelcome(seed) {
+      log('welcome', { seed });
       if (world.seed !== seed) { world = new World(seed); } // adopt the shared world
     },
-    onPeerJoin: p => { peers.join(p); setPeerCount(peers.map.size); },
+    onPeerJoin: p => { log('peer-join'); peers.join(p); setPeerCount(peers.map.size); },
     onPeerLeave: id => { peers.leave(id); setPeerCount(peers.map.size); },
     onPeerMove: (id, x, y, dir, moving) => peers.move(id, x, y, dir, moving),
     onPeerIdentity: (id, char, name) => peers.identity(id, char, name),
@@ -150,8 +154,11 @@ export function startEngine(canvas: HTMLCanvasElement): Game {
       const { dx, dy } = input.intent();
       const dir = vecToDir(dx, dy);
       if (dir && canStep(world, player.tx, player.ty, dx, dy)) {
+        log('slide', { tx: player.tx + dx, ty: player.ty + dy, dir });
         player.startSlide(player.tx + dx, player.ty + dy, dir);
         startAudio();
+      } else if (dir) {
+        log('blocked', { tx: player.tx + dx, ty: player.ty + dy });
       }
     }
 
@@ -159,10 +166,12 @@ export function startEngine(canvas: HTMLCanvasElement): Game {
     player.update(dt);
     if (wasSliding && !player.sliding) {
       // arrived on a tile
+      log('arrive', { tx: player.tx, ty: player.ty });
       net.move(player.tx * TILE, player.ty * TILE, dirIndex(player.facing), false);
       if (world.isGrass(player.tx, player.ty) && !grass.isRevealed(player.tx, player.ty)) {
         const key = tileKey(player.tx, player.ty);
         const result = rollReveal(world.seed, player.tx, player.ty);
+        log('reveal', { key, result });
         grass.set(player.tx, player.ty, result);
         if (typeof result === 'number') {
           pendingReveals.add(key); net.reveal(key, 'specimen', result); addSpecimen(result);
@@ -215,6 +224,7 @@ export function startEngine(canvas: HTMLCanvasElement): Game {
       identity = identity || voyagerName();
       // honor persisted mute (audio not yet started, so this just sets the flag for startAudio)
       if (save?.muted && !isMuted()) { setMuted(toggleMute()); }
+      log('net-connect');
       net.connect({ char: player.character, name: identity, x: player.tx * TILE, y: player.ty * TILE });
     },
     setCharacter(slug: string) {
