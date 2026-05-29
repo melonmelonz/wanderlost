@@ -52,6 +52,24 @@ function ensureFireflies(world: World) {
   }
 }
 
+// World-space cloud shadows: a handful of big soft blobs that drift slowly across the map. They
+// only darken the ground in daylight (faded out at night, where they'd just read as murk).
+let clouds: { x: number; y: number; rx: number; ry: number; vx: number; vy: number }[] | null = null;
+function ensureClouds(world: World) {
+  if (clouds) return;
+  clouds = [];
+  let seed = 424242;
+  const rnd = () => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed / 0x7fffffff; };
+  const W = world.map.width * TILE, H = world.map.height * TILE;
+  for (let i = 0; i < 12; i++) {
+    clouds.push({
+      x: rnd() * W, y: rnd() * H,
+      rx: 150 + rnd() * 200, ry: 90 + rnd() * 110,
+      vx: 5 + rnd() * 6, vy: (rnd() - 0.5) * 2, // px/sec, mostly eastward drift
+    });
+  }
+}
+
 // Soft contact shadow: a flat dark ellipse that grounds a sprite to the tile beneath it.
 function groundShadow(ctx: CanvasRenderingContext2D, cx: number, cy: number, rx: number, ry: number) {
   ctx.save();
@@ -124,6 +142,27 @@ export function render(ctx: CanvasRenderingContext2D, world: World, player: Play
       ctx.drawImage(frame, sx, sy - 4, TILE, TILE);
       ctx.globalAlpha = 1;
     }
+  }
+
+  // drifting cloud shadows over the ground — daytime only, eased out as dusk falls
+  const daylight = 1 - nightStrength(rc.clockMs);
+  if (daylight > 0.05) {
+    ensureClouds(world);
+    const t = now / 1000;
+    const W = world.map.width * TILE, H = world.map.height * TILE;
+    ctx.save();
+    for (const c of clouds!) {
+      const wx = ((c.x + c.vx * t) % W + W) % W;
+      const wy = ((c.y + c.vy * t) % H + H) % H;
+      const sx = wx - camX, sy = wy - camY;
+      if (sx < -c.rx || sy < -c.ry || sx > width + c.rx || sy > height + c.ry) continue;
+      const g = ctx.createRadialGradient(sx, sy, 0, sx, sy, c.rx);
+      g.addColorStop(0, `rgba(0,0,0,${0.12 * daylight})`);
+      g.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = g;
+      ctx.beginPath(); ctx.ellipse(sx, sy, c.rx, c.ry, 0, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.restore();
   }
 
   // y-sorted drawables: authored props/scenes + peers + local player
