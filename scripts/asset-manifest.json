@@ -1,0 +1,30 @@
+{
+  "tilesets": [
+    { "slug": "soil",       "id": "398d7604-a3b6-4a60-aec9-6189893b9466" },
+    { "slug": "grass",      "id": "33f90827-dedd-4d9e-9fb9-e6fbcf60ad6b" },
+    { "slug": "red-barren", "id": "df8064b8-65cc-47a7-87f4-086a6273d857" },
+    { "slug": "stone-path", "id": "437fa0f5-6df7-41a3-973c-3d6755f22c8f" },
+    { "slug": "bone-bed",   "id": "2bf65677-defa-4d38-a1c3-c4a1277877c5" },
+    { "slug": "water",      "id": "398d7604-a3b6-4a60-aec9-6189893b9466" },
+    { "slug": "cliff",      "id": "5bf1b71e-959e-4a88-8532-8e1c7bb689df" }
+  ],
+  "characters": [
+    { "slug": "crab-head-v2",   "id": "19a81f05-f60c-4a7a-a582-194505d48a88" },
+    { "slug": "green-alien-v2", "id": "d9f23604-f47b-4c13-8802-30585cd70a20" },
+    { "slug": "red-hair-v2",    "id": "e0e0dba8-2feb-45ce-9865-b934db108a11" }
+  ],
+  "props": [
+    { "kind": "boulder",  "id": "443ab8a5-59a9-4c13-a845-f12e74df2a06", "variants": 2 },
+    { "kind": "statue",   "id": "130cdd73-953f-47a0-aa46-b4d88898bace", "variants": 1 },
+    { "kind": "scrap",    "id": "342699b7-e61d-4b1d-8b41-872dc140636d", "variants": 2 },
+    { "kind": "signpost", "id": "17c052ea-3321-42a3-bd96-76fdbc5568d9", "variants": 1 },
+    { "kind": "bench",    "id": "2dc4a2f1-13c0-4dd7-876e-64db5cc8a45c", "variants": 1 },
+    { "kind": "bedroll",  "id": "f9f353d3-3742-4781-8e46-3db5124af154", "variants": 1 },
+    { "kind": "mushroom", "id": "9506df96-c3e3-42a5-a6f9-46d81be892de", "variants": 2 },
+    { "kind": "flower",   "id": "275c0acb-3ce8-4801-9489-7c4140e1481e", "variants": 2 },
+    { "kind": "skeleton", "id": "c0f95914-b565-4520-8c6e-588bb7c1c765", "variants": 1 },
+    { "kind": "bones",    "id": "adc77047-0b62-4634-9192-14f12166e822", "variants": 2 },
+    { "kind": "stump",    "id": "1f5a39d1-8da2-4dd5-9a70-f66e950905d7", "variants": 1 },
+    { "kind": "gem",      "id": "1965bb94-0160-4508-8147-d708e6caaaaa", "variants": 1 }
+  ]
+}

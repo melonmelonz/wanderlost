@@ -107,7 +107,7 @@ if (existsSync(LOCAL_MUTE)) {
 // 5) Scene props pulled by object id into objects/props/{kind}-{v}.png
 for (const p of manifest.props) {
   for (let v = 0; v < (p.variants ?? 1); v++) {
-    await fetchImage(`${PIXELLAB_API}/objects/${p.id}/image`, join(PUB, `objects/props/${p.kind}-${v}.png`), auth);
+    await fetchImage(`${PIXELLAB_API}/objects/${p.id}/download`, join(PUB, `objects/props/${p.kind}-${v}.png`), auth);
   }
 }
 
