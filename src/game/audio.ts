@@ -47,6 +47,34 @@ export function startAudio(): void {
   noise.connect(bp); bp.connect(windGain); windGain.connect(master); noise.start();
 }
 
+// Soft footfall: a short band-passed noise tick. Cheap nodes, torn down after ~160ms.
+export function footstep(): void {
+  if (!ctx || !started || muted || !master) return;
+  const C = ctx, t = C.currentTime;
+  const src = C.createBufferSource(); src.buffer = makeNoiseBuffer(C); src.loop = true;
+  const bp = C.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 260 + Math.random() * 140; bp.Q.value = 1.4;
+  const g = C.createGain();
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(0.05, t + 0.008);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + 0.13);
+  src.connect(bp); bp.connect(g); g.connect(master);
+  src.start(t); src.stop(t + 0.16);
+}
+
+// Gentle interaction chime: a sine ping. `semis` shifts pitch from C5 (loot rings a touch higher).
+export function chime(semis = 0): void {
+  if (!ctx || !started || muted || !master) return;
+  const C = ctx, t = C.currentTime;
+  const osc = C.createOscillator(); osc.type = 'sine';
+  osc.frequency.value = 523.25 * Math.pow(2, semis / 12);
+  const g = C.createGain();
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(0.1, t + 0.01);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + 0.5);
+  osc.connect(g); g.connect(master);
+  osc.start(t); osc.stop(t + 0.55);
+}
+
 export function toggleMute(): boolean {
   muted = !muted;
   if (master && ctx) {

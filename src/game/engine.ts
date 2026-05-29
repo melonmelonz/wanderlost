@@ -1,5 +1,5 @@
 // src/game/engine.ts
-import { World, TILE } from './world';
+import { World, TILE, GroundType } from './world';
 import { canStep } from './collision';
 import { GROUND_TILESETS } from './terrain';
 import { Player } from './doug';
@@ -12,7 +12,8 @@ import { OpenState, allObjectSources } from './objects';
 import { dayNumber, CYCLE_MS } from './daynight';
 import { Net, tileKey } from './net';
 import { Peers, dirIndex } from './peers';
-import { startAudio, toggleMute, setDuck, isMuted } from './audio';
+import { startAudio, toggleMute, setDuck, isMuted, footstep, chime } from './audio';
+import { Particles } from './particles';
 import { loadSave, writeSave, type SaveData } from './save';
 import { resolveStart } from './spawn';
 import {
@@ -62,6 +63,8 @@ export function startEngine(canvas: HTMLCanvasElement): Game {
   const grass = new GrassState();
   const open = new OpenState();
   const peers = new Peers();
+  const dust = new Particles();
+  let stepCount = 0; // throttles footfalls to every other tile so walking doesn't machine-gun
   let clockMs = save?.clockMs ?? 0;
   let lastDay = dayNumber(clockMs);
   let identity = '';
@@ -140,12 +143,13 @@ export function startEngine(canvas: HTMLCanvasElement): Game {
       const n = 2 + Math.floor(rng() * 3);
       for (let i = 0; i < n; i++) addSpecimen(1 + Math.floor(rng() * 7));
       showInteract(`You ease the lid open. ${n} specimen${n === 1 ? '' : 's'} inside. It creaks like it's glad to be useful.`);
+      chime(7); // brighter ring for a find
       return;
     }
 
     // otherwise: examine whatever prop is on the tile we face, then the tile we stand on
     const prop = findProp(world, ftx, fty) ?? findProp(world, player.tx, player.ty);
-    if (prop) showInteract(examineFor(prop.kind, prop.tx, prop.ty));
+    if (prop) { showInteract(examineFor(prop.kind, prop.tx, prop.ty)); chime(0); }
   };
   input.onToggleInventory = () => toggleInventory();
   input.onMute = () => { startAudio(); const m = toggleMute(); setMuted(m); };
@@ -165,13 +169,16 @@ export function startEngine(canvas: HTMLCanvasElement): Game {
       // arrived on a tile
       log('arrive', { tx: player.tx, ty: player.ty });
       net.move(player.tx * TILE, player.ty * TILE, dirIndex(player.facing), false);
+      // footfall: kick up ground-tinted dust and tick a soft step sound every other tile
+      dust.spawn(player.tx * TILE + TILE / 2, player.ty * TILE + TILE - 4, dustColor(world.groundAt(player.tx, player.ty)));
+      if ((stepCount++ & 1) === 0) footstep();
       if (world.isGrass(player.tx, player.ty) && !grass.isRevealed(player.tx, player.ty)) {
         const key = tileKey(player.tx, player.ty);
         const result = rollReveal(world.seed, player.tx, player.ty);
         log('reveal', { key, result });
         grass.set(player.tx, player.ty, result);
         if (typeof result === 'number') {
-          pendingReveals.add(key); net.reveal(key, 'specimen', result); addSpecimen(result);
+          pendingReveals.add(key); net.reveal(key, 'specimen', result); addSpecimen(result); chime(4);
         } else if (result === 'note') {
           pendingReveals.add(key); net.reveal(key, 'note');
           const text = noteFor(player.tx, player.ty);
@@ -204,7 +211,8 @@ export function startEngine(canvas: HTMLCanvasElement): Game {
     updateDuck(clockMs);
 
     peers.update(dt);
-    render(ctx, world, player, cam, { clockMs, grass, open, peers: peers.map, resolve });
+    dust.update(dt);
+    render(ctx, world, player, cam, { clockMs, grass, open, peers: peers.map, resolve, particles: dust });
     raf = requestAnimationFrame(loop);
   };
   raf = requestAnimationFrame(loop);
@@ -262,6 +270,19 @@ function findChest(world: World, tx: number, ty: number) {
 
 function findProp(world: World, tx: number, ty: number) {
   return world.drawables().find(o => o.tx === tx && o.ty === ty);
+}
+
+// Footstep dust tinted to the ground underfoot, so grass puffs green and barren kicks up rust.
+function dustColor(g: GroundType): string {
+  switch (g) {
+    case GroundType.Grass:     return '150,170,90';
+    case GroundType.RedBarren: return '170,90,60';
+    case GroundType.StonePath: return '170,165,150';
+    case GroundType.BoneBed:   return '200,195,170';
+    case GroundType.Water:     return '120,180,210';
+    case GroundType.Cliff:     return '120,120,130';
+    default:                   return '120,95,70'; // soil
+  }
 }
 
 let duckPhase = '';

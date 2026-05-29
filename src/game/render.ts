@@ -11,6 +11,7 @@ import type { OpenState } from './objects';
 import { phaseAt, nightStrength } from './daynight';
 import type { PeerState } from './peers';
 import { indexDir } from './peers';
+import type { Particles } from './particles';
 
 export interface Camera { x: number; y: number; }
 export interface PeerView { px: number; py: number; facing: string; character: string; name: string; }
@@ -23,6 +24,7 @@ export interface RenderCtx {
   open: OpenState;
   peers: Map<string, PeerState>;
   resolve?: SpriteResolver;
+  particles?: Particles;
 }
 
 // Precomputed parallax starfield (screen-space, regenerated on first use).
@@ -33,6 +35,20 @@ function ensureStars(w: number, h: number) {
   let seed = 1234567;
   const rnd = () => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed / 0x7fffffff; };
   for (let i = 0; i < 220; i++) stars.push({ x: rnd() * w, y: rnd() * h * 0.7, r: rnd() < 0.85 ? 0.7 : 1.4 });
+}
+
+// World-space fireflies, scattered once over grass tiles. They only glow at dusk/night.
+let fireflies: { x: number; y: number; ph: number }[] | null = null;
+function ensureFireflies(world: World) {
+  if (fireflies) return;
+  fireflies = [];
+  let seed = 991733;
+  const rnd = () => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed / 0x7fffffff; };
+  for (let tries = 0; tries < 4000 && fireflies.length < 110; tries++) {
+    const tx = Math.floor(rnd() * world.map.width), ty = Math.floor(rnd() * world.map.height);
+    if (world.groundAt(tx, ty) !== GroundType.Grass) continue;
+    fireflies.push({ x: tx * TILE + rnd() * TILE, y: ty * TILE + rnd() * TILE, ph: rnd() * Math.PI * 2 });
+  }
 }
 
 interface Drawable { wy: number; draw(): void; }
@@ -109,6 +125,26 @@ export function render(ctx: CanvasRenderingContext2D, world: World, player: Play
     }
   }
 
+  // water shimmer: a couple of slow specular glints sweeping each water tile (additive)
+  ctx.globalCompositeOperation = 'lighter';
+  for (let ty = minTy; ty <= maxTy; ty++) {
+    for (let tx = minTx; tx <= maxTx; tx++) {
+      if (world.groundAt(tx, ty) !== GroundType.Water) continue;
+      const sx = tx * TILE - camX, sy = ty * TILE - camY;
+      const phw = tx * 0.7 + ty * 1.3;
+      for (let k = 0; k < 2; k++) {
+        const yy = sy + 3 + (Math.sin(now / 700 + phw + k * 2.1) * 0.5 + 0.5) * (TILE - 6);
+        const a = 0.04 + 0.05 * Math.sin(now / 480 + phw + k);
+        if (a <= 0) continue;
+        ctx.globalAlpha = a;
+        ctx.fillStyle = 'rgb(150,220,255)';
+        ctx.fillRect(sx + 3, Math.round(yy), TILE - 6, 1);
+      }
+    }
+  }
+  ctx.globalAlpha = 1;
+  ctx.globalCompositeOperation = 'source-over';
+
   // y-sorted drawables: authored props/scenes + peers + local player
   const drawables: Drawable[] = [];
   for (const o of world.drawables()) {
@@ -146,6 +182,18 @@ export function render(ctx: CanvasRenderingContext2D, world: World, player: Play
   drawables.sort((a, b) => a.wy - b.wy);
   for (const d of drawables) d.draw();
 
+  // footstep dust: drawn above the ground, fading as motes age
+  if (rc.particles) {
+    for (const p of rc.particles.items) {
+      const a = Math.max(0, 1 - p.life / p.max) * 0.6;
+      if (a <= 0) continue;
+      ctx.globalAlpha = a;
+      ctx.fillStyle = `rgb(${p.rgb})`;
+      ctx.fillRect(Math.round(p.x - camX), Math.round(p.y - camY), p.size, p.size);
+    }
+    ctx.globalAlpha = 1;
+  }
+
   // campfire glow (additive), strongest at night
   const night = nightStrength(rc.clockMs);
   if (night > 0.05) {
@@ -178,6 +226,29 @@ export function render(ctx: CanvasRenderingContext2D, world: World, player: Play
   }
   ctx.globalCompositeOperation = 'source-over';
 
+  // fireflies — drifting warm motes over the grass, only after dusk settles in
+  if (night > 0.12) {
+    ensureFireflies(world);
+    const fade = Math.min(1, (night - 0.12) / 0.5);
+    ctx.globalCompositeOperation = 'lighter';
+    for (const f of fireflies!) {
+      const wx = f.x + Math.sin(now / 1300 + f.ph) * 10;
+      const wy = f.y + Math.cos(now / 1700 + f.ph * 1.3) * 8;
+      const sx = wx - camX, sy = wy - camY;
+      if (sx < -8 || sy < -8 || sx > width + 8 || sy > height + 8) continue;
+      const flick = 0.35 + 0.65 * Math.pow(Math.sin(now / 400 + f.ph * 3) * 0.5 + 0.5, 2);
+      const a = flick * fade * 0.85;
+      const rad = 5;
+      const g = ctx.createRadialGradient(sx, sy, 0, sx, sy, rad);
+      g.addColorStop(0, `rgba(190,255,150,${a})`);
+      g.addColorStop(1, 'rgba(190,255,150,0)');
+      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(sx, sy, rad, 0, Math.PI * 2); ctx.fill();
+      ctx.globalAlpha = a; ctx.fillStyle = 'rgb(225,255,185)';
+      ctx.fillRect(Math.round(sx), Math.round(sy), 1, 1); ctx.globalAlpha = 1;
+    }
+    ctx.globalCompositeOperation = 'source-over';
+  }
+
   // day/night tint + starfield
   const ph = phaseAt(rc.clockMs);
   if (ph.starAlpha > 0.01) {
@@ -196,6 +267,15 @@ export function render(ctx: CanvasRenderingContext2D, world: World, player: Play
     ctx.fillStyle = ph.tint; ctx.globalAlpha = ph.alpha;
     ctx.fillRect(0, 0, width, height); ctx.globalAlpha = 1;
   }
+
+  // vignette — a soft dark frame that pulls the eye inward and deepens the mood
+  const vg = ctx.createRadialGradient(
+    width / 2, height / 2, Math.min(width, height) * 0.35,
+    width / 2, height / 2, Math.max(width, height) * 0.75,
+  );
+  vg.addColorStop(0, 'rgba(0,0,0,0)');
+  vg.addColorStop(1, 'rgba(0,0,0,0.38)');
+  ctx.fillStyle = vg; ctx.fillRect(0, 0, width, height);
 }
 
 function drawSprite(
